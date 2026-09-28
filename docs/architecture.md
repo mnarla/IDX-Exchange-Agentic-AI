@@ -4,16 +4,7 @@
   Reference architectural documentation and runtime fundamentals for the OpenClaw-based real estate multi-agent system.
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/OpenClaw-2026.9.4-FF4F00?style=for-the-badge&logo=gnubash&logoColor=white" alt="OpenClaw" />
-  <img src="https://img.shields.io/badge/Runtime-Node.js%2026-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/Model-Gemini%203.5%20Flash%20Lite-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini 3.5 Flash Lite" />
-  <img src="https://img.shields.io/badge/Database-MySQL%20(idx__exchange)-00758F?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL" />
-  <img src="https://img.shields.io/badge/Channel-WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="WhatsApp" />
-</p>
 
-> [!NOTE]
-> This document reflects the live, verified OpenClaw runtime environment audited during Week 1 of the IDX Exchange internship program. It covers the full lifecycle of an inbound buyer or investor query—from WhatsApp ingress down to the `idx_exchange` MySQL tables—highlighting what is live today versus what plugs in during Weeks 2+.
 
 ---
 
