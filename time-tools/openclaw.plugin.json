@@ -1,0 +1,19 @@
+{
+  "id": "time-tools",
+  "name": "Time Tools",
+  "description": "Returns the current date and time, optionally for a given IANA timezone.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "get_current_time"
+    ]
+  }
+}
