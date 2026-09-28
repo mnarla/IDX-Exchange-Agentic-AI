@@ -14,6 +14,20 @@
 
 When a client sends a message over WhatsApp, it doesn't just hit a stateless API endpoint. It moves through a stateful pipeline that handles channel normalization, session hydration, long-term memory retrieval, declarative skill selection, policy-based tool catalog filtering, and sandboxed tool execution before reaching our relational property databases.
 
+#### Overview
+```mermaid
+flowchart LR
+    User["User (WhatsApp)"] --> Channel["WhatsApp Channel"]
+    Channel --> Gateway["Orchestrator Runtime"]
+    Gateway --> Filter["Tool Policy Filter"]
+    Filter --> LLM["LLM (Gemini)"]
+    LLM --> Tools["Skills & Tools<br/>(time-tools now; MLS DB tools planned)"]
+    Tools --> State["Memory & Session Store"]
+    State --> Resp["Response to User"]
+```
+*High-level query lifecycle from WhatsApp message ingress to tool orchestration and response delivery.*
+
+#### Detailed view
 ```mermaid
 sequenceDiagram
     autonumber
@@ -26,38 +40,40 @@ sequenceDiagram
     participant Tools as Plugin Tool Engine (TypeBox / Async Plugin)
     participant DB as MySQL Database (idx_exchange)
 
-    User->>Channel: Inbound Query ("Find 3-bed homes in Irvine under $1.2M")
+    User->>Channel: Inbound Query ("Find 3-bed homes under $1.2M")
     Channel->>Gateway: Normalized inbound event
-    Gateway->>Session: Resolve / Resume Session (session_conversations, session_nodes)
-    Gateway->>Memory: Search Contextual Memory (BM25 FTS5 + Embedding Cache)
-    Memory-->>Gateway: Injected Memory Chunks & User Preferences
-    Gateway->>Skills: Load Declarative Domain Instructions (SKILL.md)
-    Skills-->>Gateway: Injected Domain Heuristics & Behavioral Rules
+    Gateway->>Session: Resolve session (session_conversations, session_nodes)
+    Gateway->>Memory: Active memory recall (auto-injected)
+    Memory-->>Gateway: Injected memory chunks
+    Gateway->>Skills: Load declarative instructions (SKILL.md)
+    Skills-->>Gateway: Injected domain rules & heuristics
     Gateway->>Gateway: Tool policy filter (tools.profile + allow/deny)
     Gateway->>Gateway: LLM Turn Dispatch (google/gemini-3.5-flash-lite)
     
-    alt Model Dispatches Tool Execution
-        Gateway->>Tools: Invocation Request with Validated TypeBox Arguments
+    alt Model calls a tool
+        Gateway->>Tools: Invocation request (TypeBox validated)
         opt Query Active MLS Inventory (Planned Weeks 2+)
-            Tools->>DB: SELECT ... FROM rets_property (Active Listings, limit <= 50)
+            Tools->>DB: SELECT ... FROM rets_property (Active, limit <= 50)
             DB-->>Tools: Listing rows (price, beds, baths, city, remarks)
         end
         opt Query Historical Comps (Planned Weeks 2+)
-            Tools->>DB: SELECT ... FROM california_sold (Closed Deals 2021-2025, limit <= 50)
+            Tools->>DB: SELECT ... FROM california_sold (Closed, limit <= 50)
             DB-->>Tools: Transaction rows (close price, sold date, DOM, area)
         end
         opt Toy Plugin Tool (Verified Live in Week 1)
-            Tools->>Tools: Execute get_current_time(timezone) (time-tools plugin)
+            Tools->>Tools: Execute get_current_time(timezone) (time-tools)
             Tools-->>Gateway: { currentTime, iso, timezone }
         end
-        Tools-->>Gateway: Structured Tool Execution Result Payload
-        Gateway->>Gateway: Final Response Generation
+        Tools-->>Gateway: Tool execution result payload
+        Gateway->>Gateway: LLM turn with tool result -> final answer
+    else No tool needed
+        Gateway->>Gateway: LLM answers directly from context
     end
 
     Gateway->>Memory: Write Transcript Chunks to memory_index_chunks_fts
-    Gateway->>Session: Commit Turn Nodes & Delivery State
-    Gateway->>Channel: Outbound WhatsApp Message Payload
-    Channel->>User: Formatted WhatsApp Response Delivery
+    Gateway->>Session: Commit turn nodes & delivery state
+    Gateway->>Channel: Outbound WhatsApp message payload
+    Channel->>User: Formatted WhatsApp response delivery
 ```
 
 ---
