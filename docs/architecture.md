@@ -172,7 +172,7 @@ In later weeks, our query tools connect to a local MySQL database (`idx_exchange
 
 ## Verified End-to-End Live Trace
 
-During Week 1 verification, we built, compiled, linked, and executed the toy `time-tools` plugin live over WhatsApp. Below is the exact transcript event log extracted from `openclaw-agent.sqlite`:
+Week 1 verification: executing the toy `time-tools` plugin live over WhatsApp. Below is the exact transcript event log extracted from `openclaw-agent.sqlite`:
 
 ```text
 [15:41:23 PDT] Inbound WhatsApp Event:
