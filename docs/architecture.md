@@ -1,197 +1,139 @@
-<h1 align="center">IDX Exchange — Agentic Architecture & Query Lifecycle</h1>
+# IDX Exchange — OpenClaw Architecture Fundamentals (Week 1)
 
-<p align="center">
-  Reference architectural documentation and runtime fundamentals for the OpenClaw-based real estate multi-agent system.
-</p>
-
-
+Reference architecture documentation and query lifecycle for the IDX Exchange agentic real estate assistant.
 
 ---
 
-## Architecture & How It Works
+## Architecture Flow
 
-### End-to-End Query Lifecycle
+The end-to-end lifecycle follows OpenClaw's core message processing pipeline:
 
-When a client sends a message over WhatsApp, it doesn't just hit a stateless API endpoint. It moves through a stateful pipeline that handles channel normalization, session hydration, long-term memory retrieval, declarative skill selection, policy-based tool catalog filtering, and sandboxed tool execution before reaching our relational property databases.
-
-#### Overview
 ```mermaid
 flowchart LR
-    User["User (WhatsApp)"] --> Channel["WhatsApp Channel"]
-    Channel --> Gateway["Orchestrator Runtime"]
-    Gateway --> Filter["Tool Policy Filter"]
-    Filter --> LLM["LLM (Gemini)"]
-    LLM --> Tools["Skills & Tools<br/>(time-tools now; MLS DB tools planned)"]
-    Tools --> State["Memory & Session Store"]
-    State --> Resp["Response to User"]
+    User["User"] --> WA["WhatsApp"]
+    WA --> Runtime["OpenClaw Runtime"]
+    Runtime --> Selector["Skill Selector"]
+    Selector --> Tools["Tool Execution<br/>(MLS DB / time-tools)"]
+    Tools --> Memory["Memory Update"]
+    Memory --> Resp["Response Delivery"]
+    Resp --> User
 ```
-*High-level query lifecycle from WhatsApp message ingress to tool orchestration and response delivery.*
 
-#### Detailed view
+---
+
+## Detailed Workflow Diagram
+
+This sequence traces how an inbound user query flows through OpenClaw skills to external tools and databases:
+
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as User (WhatsApp)
-    participant Channel as WhatsApp Channel Gateway
-    participant Gateway as Orchestrator Runtime (ai.openclaw.gateway :18789)
-    participant Session as Session Store (openclaw-agent.sqlite)
-    participant Memory as Hybrid Memory (FTS5 / Vector Cache)
-    participant Skills as Skill Loader (SKILL.md)
-    participant Tools as Plugin Tool Engine (TypeBox / Async Plugin)
-    participant DB as MySQL Database (idx_exchange)
+    participant Channel as WhatsApp Channel
+    participant Runtime as OpenClaw Runtime (Gemini 3.5)
+    participant Skills as Skill Selector (SKILL.md)
+    participant Tools as Tool Execution Engine
+    participant DB as MLS Database (idx_exchange)
+    participant Memory as Session & Memory Store
 
-    User->>Channel: Inbound Query ("Find 3-bed homes under $1.2M")
-    Channel->>Gateway: Normalized inbound event
-    Gateway->>Session: Resolve session (session_conversations, session_nodes)
-    Gateway->>Memory: Active memory recall (auto-injected)
-    Memory-->>Gateway: Injected memory chunks
-    Gateway->>Skills: Load declarative instructions (SKILL.md)
-    Skills-->>Gateway: Injected domain rules & heuristics
-    Gateway->>Gateway: Tool policy filter (tools.profile + allow/deny)
-    Gateway->>Gateway: LLM Turn Dispatch (google/gemini-3.5-flash-lite)
-    
-    alt Model calls a tool
-        Gateway->>Tools: Invocation request (TypeBox validated)
-        opt Query Active MLS Inventory (Planned Weeks 2+)
-            Tools->>DB: SELECT ... FROM rets_property (Active, limit <= 50)
-            DB-->>Tools: Listing rows (price, beds, baths, city, remarks)
+    User->>Channel: "Find 3-bed homes under $1.2M"
+    Channel->>Runtime: Inbound message event
+    Runtime->>Memory: Load session history & memory context
+    Runtime->>Skills: Match relevant skill instructions
+    Skills-->>Runtime: Domain rules & tool guidance
+
+    alt Model requires tool execution
+        Runtime->>Tools: Call tool with validated arguments
+        opt Query Active MLS Inventory (rets_property)
+            Tools->>DB: SELECT listings WHERE beds = 3 AND price <= 1200000 (LIMIT 50)
+            DB-->>Tools: Property listings
         end
-        opt Query Historical Comps (Planned Weeks 2+)
-            Tools->>DB: SELECT ... FROM california_sold (Closed, limit <= 50)
-            DB-->>Tools: Transaction rows (close price, sold date, DOM, area)
+        opt Query Historical Comps (california_sold)
+            Tools->>DB: SELECT comps by city/zip and sqft (LIMIT 50)
+            DB-->>Tools: Closed transactions
         end
-        opt Toy Plugin Tool (Verified Live in Week 1)
-            Tools->>Tools: Execute get_current_time(timezone) (time-tools)
-            Tools-->>Gateway: { currentTime, iso, timezone }
+        opt Utility Tool (Verified Live)
+            Tools->>Tools: getCurrentTime("America/Chicago")
+            Tools-->>Tools: Formatted local time
         end
-        Tools-->>Gateway: Tool execution result payload
-        Gateway->>Gateway: LLM turn with tool result -> final answer
-    else No tool needed
-        Gateway->>Gateway: LLM answers directly from context
+        Tools-->>Runtime: Tool execution payload
+        Runtime->>Runtime: Generate final answer with tool data
+    else Direct response
+        Runtime->>Runtime: Generate direct response from context
     end
 
-    Gateway->>Memory: Write Transcript Chunks to memory_index_chunks_fts
-    Gateway->>Session: Commit turn nodes & delivery state
-    Gateway->>Channel: Outbound WhatsApp message payload
-    Channel->>User: Formatted WhatsApp response delivery
+    Runtime->>Memory: Update session transcript & memory
+    Runtime->>Channel: Send response
+    Channel->>User: WhatsApp message delivered
 ```
 
 ---
 
-## The 6 Core System Layers
+## Key Components
 
-### 1. Channels (Ingress & Egress Gateway)
-The entry point for all real-time communication. OpenClaw connects directly to WhatsApp via a dedicated gateway adapter running on the host machine.
-* **Session Mapping**: Normalizes raw incoming WhatsApp phone numbers into isolated, persistent session keys (`agent:test:main`), preventing conversations from bleeding into each other.
-* **Access Control**: Applies an empty group policy allowlist to restrict bot execution strictly to authenticated direct messages.
+OpenClaw coordinates six core architectural layers:
 
-### 2. Orchestrator Runtime
-The central daemon driving the agentic loop.
-* **Daemon Process**: Runs locally as macOS LaunchAgent `ai.openclaw.gateway` on loopback port `127.0.0.1:18789`.
-* **Inference Engine**: Connects to `google/gemini-3.5-flash-lite`, managing streaming turns, structured tool calls, and auto-recovery fences.
-* **Adaptive Retry Handling**: Transparently intercepts transient upstream API outages (such as Google 503 high-demand spikes) and runs exponential backoff retries while keeping WhatsApp's native typing indicator active so users aren't left hanging.
+1. **Skills** — Modular capability units defined in declarative markdown (`SKILL.md`). They teach the model *how to reason*, which tools to select, and domain-specific rules (e.g., real estate search heuristics).
+2. **Channels** — Communication interfaces connecting OpenClaw to messaging platforms. Week 1 uses the WhatsApp gateway, mapping phone numbers to isolated user sessions.
+3. **Sessions** — Persistent, per-user state storage ensuring conversation turns, context windows, and message history remain isolated between users.
+4. **Tools** — Typed async functions that perform real procedural work and I/O. Tools require explicit allowlisting in `openclaw.json` (`tools.alsoAllow`), while raw shell access is denied (`tools.deny = ["exec"]`).
+5. **Memory** — Hybrid storage combining short-term conversation session history with long-term vector/keyword retrieval for past client preferences.
+6. **Orchestrator** — The central runtime daemon driving the LLM (`google/gemini-3.5-flash-lite`), routing incoming queries to the appropriate skill, handling retries, and managing tool calls.
 
-### 3. Sessions (State Isolation & Concurrency)
-Ensures every client conversation has an isolated, durable state that survives gateway reboots.
-* **Database**: Backed by local SQLite storage at `~/.openclaw/agents/test/agent/openclaw-agent.sqlite`.
-* **Key Tables**:
-  * `session_conversations`: Tracks conversation lifecycle, participants, and provider bindings.
-  * `session_nodes`: Directed acyclic graph (DAG) capturing individual message turns, tool calls, and branching points.
-  * `session_windows`: Manages active context token budgets and compaction watermarks.
+---
 
-### 4. Memory (Hybrid Retrieval Engine)
-Contextual recall across long conversation threads, powered by OpenClaw's `memory-core` plugin.
-* **BM25 / Keyword Retrieval**: Uses SQLite's full-text search engine (`memory_index_chunks_fts`) to index every turn and pull relevant historical mentions by keyword.
-* **Vector Semantic Search**: SQLite vector caching (`memory_embedding_cache`) stores chunk embeddings to retrieve semantically related facts (e.g., previous client budget mentions or preferred school districts) even when different wording is used.
+## Tool Definition Pattern
 
-### 5. Skills vs. Tools Decoupling & Policy Enforcement
-A major point of confusion in beginner handbooks is treating "skills" as a catch-all term. In production OpenClaw systems, behavioral reasoning and procedural execution are strictly decoupled:
+Tools are implemented as typed async functions that execute procedures and return structured JSON:
 
-| Layer | Implementation | Responsibility |
-|---|---|---|
-| **Skills** | Declarative Markdown (`SKILL.md`) | Teaches the model **how to reason**, domain rules, query strategies, and when to pick specific tools. Contains zero executable code. |
-| **Tools** | Procedural TypeScript Plugins (`defineToolPlugin`) | Compiled code defining strict `TypeBox` input/output schemas that perform actual network and database I/O. |
+```typescript
+export async function getCurrentTime(timezone: string = "UTC") {
+  return { 
+    currentTime: new Date().toLocaleString("en-US", { timeZone: timezone }),
+    iso: new Date().toISOString()
+  };
+}
 
-#### Policy Configuration & Sandbox Hardening
-By default, OpenClaw's `"profile": "coding"` enforces an allowlist of built-in core tools. That built-in list excludes external plugins and exposes the raw shell `exec` tool. In our initial test runs, this caused the model to fall back to shell `exec` (`TZ=... date`) instead of our plugin tool.
-
-To configure plugin tool availability and restrict raw execution, the active configuration in `openclaw.json` is:
-```json
-"tools": {
-  "profile": "coding",
-  "alsoAllow": [
-    "get_current_time"
-  ],
-  "deny": [
-    "exec"
-  ]
+export async function handleMessage(message: string) {
+  if (message.toLowerCase().includes("time")) {
+    return await getCurrentTime();
+  }
+  return { response: "I could not understand the request." };
 }
 ```
-*(Note: Database query tools in the style of `rets_property` and `california_sold` will be added to `alsoAllow` in later weeks once implemented; real tool names TBD).*
-
-Denying `exec` removes the shell fallback (the model can still answer from its own knowledge, so tool use is encouraged by tool availability and skills, not guaranteed).
-
-> **Recommended hardening (not yet applied)**: In production environments, consider replacing `"deny": ["exec"]` with `"deny": ["group:runtime"]`, which comprehensively blocks all runtime shell primitives (`exec`, `process`, `code_execution`).
-
-### 6. Relational Database Layer (`idx_exchange`)
-In later weeks, our query tools connect to a local MySQL database (`idx_exchange`) optimized for MLS search and valuation comps:
-
-* **Active Listings (`rets_property`)**:
-  * **Scale**: 130+ MLS columns representing current active inventory across California.
-  * **Core Fields**: `L_ListingID` (Primary listing key), `L_Address`, `L_City`, `L_Zip`, `L_SystemPrice` (Current list price), `L_Keyword2` (Bedrooms), `LM_Dec_3` (Bathrooms), `LM_Int2_3` (Square footage).
-  * **Natural Language Search**: `L_Remarks` is indexed with a MySQL FULLTEXT index (`ft_remarks`) to allow fast semantic filtering for specific features (e.g., *"pool"*, *"ADU"*, *"ocean view"*, *"single story"*).
-* **Sold Comps (`california_sold`)**:
-  * **Scale**: 46 columns covering historical closed transactions from 2021 through 2025.
-  * **Core Fields**: `ListingKey`, `ClosePrice`, `CloseDate`, `ListPrice`, `DaysOnMarket`, `LivingArea`, `Latitude`, `Longitude`.
-  * **Use Cases**: Running automated comparable market analyses (CMA), historical price-per-square-foot trend lines, and average days-on-market calculations.
-* **Cross-Table Correlation**:
-  * Active listings and sold comps can't be joined on listing ID. Both tables use the same 9–10 digit MLS ID format, but `rets_property` holds only active listings (`L_Status = 'Active'`, 55,212 rows) and `california_sold` holds closed deals (98,552 rows), so the ID sets don't overlap (a direct join returns 0 rows). Comps are found by similarity instead: city/zip, bedrooms, living area, and a close-date window.
-  * Example comp lookup query on `california_sold` using real schema columns:
-    ```sql
-    SELECT 
-      UnparsedAddress, 
-      City, 
-      PostalCode, 
-      BedroomsTotal, 
-      BathroomsTotalInteger, 
-      LivingArea, 
-      ClosePrice, 
-      CloseDate, 
-      DaysOnMarket
-    FROM california_sold
-    WHERE City = 'Irvine'
-      AND BedroomsTotal = 3
-      AND LivingArea BETWEEN 1500 AND 2200
-      AND CloseDate >= '2024-01-01'
-    ORDER BY CloseDate DESC
-    LIMIT 50;
-    ```
-* **Planned Guardrail**: Once SQL tools are implemented in later weeks (no SQL tools exist in the codebase yet), every generated query will enforce a strict `LIMIT <= 50` rows to prevent token window saturation and safeguard against bulk MLS data exfiltration.
 
 ---
 
-## Verified End-to-End Live Trace
+## MLS Database Layer (`idx_exchange`)
+
+When property queries are executed in upcoming weeks, tools will interface with two relational datasets in MySQL:
+
+* **Active Listings (`rets_property`)**: 55,000+ current California listings with price, address, beds, baths, square footage, and full-text searchable agent remarks (`ft_remarks`).
+* **Historical Comps (`california_sold`)**: 98,000+ closed sales (2021–2025) used for pricing comps, DOM (days on market), and valuation trends.
+* **Correlation**: Active and sold tables are not joined on listing IDs (as their ID sets do not overlap). Instead, comps are queried by geographic and physical similarity: city/ZIP, bedrooms, square footage, and recent close-date windows.
+* **Planned Safety Guardrail**: Every database query enforces `LIMIT <= 50` to prevent token window saturation and bulk data exfiltration.
+
+---
+
+## Verified Live Trace
 
 Week 1 verification: executing the toy `time-tools` plugin live over WhatsApp. Below is the exact transcript event log extracted from `openclaw-agent.sqlite`:
 
 ```text
-[15:41:23 PDT] Inbound WhatsApp Event:
-  User: "What time is it in Chicago?"
+[Inbound WhatsApp Event]
+User: "What time is it in Chicago?"
 
-[15:41:26 PDT] Orchestrator Dispatch (Model: google/gemini-3.5-flash-lite):
-  Event: toolCall
-  Tool Name: get_current_time
-  Call ID: call_243626
-  Arguments: { "timezone": "America/Chicago" }
+[Runtime Dispatch]
+Model: google/gemini-3.5-flash-lite
+Tool: get_current_time({ "timezone": "America/Chicago" })
 
-[15:41:26 PDT] Plugin Tool Execution (time-tools/dist/index.js):
-  Payload Returned:
-  {
-    "currentTime": "Monday, September 28, 2026 at 5:41:26 PM CDT",
-    "iso": "2026-09-28T22:41:26.126Z",
-    "timezone": "America/Chicago"
-  }
+[Tool Execution Result]
+{
+  "currentTime": "Monday, September 28, 2026 at 5:41:26 PM CDT",
+  "iso": "2026-09-28T22:41:26.126Z",
+  "timezone": "America/Chicago"
+}
 
-[15:41:27 PDT] WhatsApp Outbound Delivery:
-  Assistant: "It is currently 5:41 PM (CDT) on Monday, September 28, 2026 in Chicago."
+[Outbound WhatsApp Delivery]
+Assistant: "It is currently 5:41 PM (CDT) on Monday, September 28, 2026 in Chicago."
 ```
