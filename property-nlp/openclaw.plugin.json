@@ -1,0 +1,19 @@
+{
+  "id": "property-nlp",
+  "name": "Property NLP",
+  "description": "Natural language parser converting free-text property queries into structured database filters for rets_property.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "parse_property_query"
+    ]
+  }
+}

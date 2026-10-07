@@ -104,6 +104,34 @@ export async function handleMessage(message: string) {
 
 ---
 
+## Natural Language Property Search (Week 2)
+
+Week 2 introduces the natural language front-end (`property-nlp`) for database queries against `rets_property` (Week 3):
+
+```mermaid
+flowchart LR
+    Query["User Free-Text Query<br/>('3-bed condo in Irvine under $1.5M with pool')"] --> Skill["Skill Selector<br/>(skills/property-search)"]
+    Skill --> Tool["Tool: parse_property_query<br/>(property-nlp)"]
+    Tool --> Filters["Structured Filter Object<br/>{ city, maxPrice, minBeds, ... }"]
+    Filters --> DB["Week 3 Database Layer<br/>(SELECT * FROM rets_property WHERE ...)"]
+```
+
+### Supported Filters & Mapping to `rets_property`
+
+| Filter Key | Semantics | DB Column | Target Type | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| `city` | Match | `L_City` | `string \| null` | `"Irvine"`, `"Newport Beach"` |
+| `maxPrice` | Max (`<=`) | `L_SystemPrice` | `number \| null` | `1500000` |
+| `minBeds` | Min (`>=`) | `L_Keyword2` | `number \| null` | `3` |
+| `minBaths` | Min (`>=`) | `LM_Dec_3` | `number \| null` | `2.5` |
+| `minSqft` | Min (`>=`) | `LM_Int2_3` | `number \| null` | `2500` |
+| `type` | Match | `L_Type_` | `string \| null` | `"Condominium"`, `"SingleFamilyResidence"` |
+| `pool` | Flag | `PoolPrivateYN` | `"True" \| null` | `"True"` |
+| `hasView` | Flag | `ViewYN` | `"True" \| null` | `"True"` |
+| `maxHOA` | Max (`<=`) | `AssociationFee` | `number \| null` | `400` |
+
+---
+
 ## MLS Database Layer (`idx_exchange`)
 
 When property queries are executed in upcoming weeks, tools will interface with two relational datasets in MySQL:
