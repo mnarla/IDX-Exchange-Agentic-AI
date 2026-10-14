@@ -32,12 +32,14 @@ The natural language parser (`parse_property_query`) extracts structured filter 
 ## Tool & Query Rules
 
 1. **Query Workflow**:
-   - For any user query expressing real estate search criteria, first invoke `parse_property_query(query: string)`.
-   - Pass the resulting structured `PropertyFilter` object directly to `query_property_mls(filters, mode, page, limit, months)`.
+   - For any user query expressing real estate search criteria, execute the complete search in the **same turn**:
+     1. First invoke `parse_property_query(query: string)`.
+     2. Immediately invoke `query_property_mls(filters: parsedFilters, mode: "active")`. Do NOT ask for confirmation before querying; execute the database search immediately.
+     3. Present the returned property cards (`result.text`) directly to the user.
 
 2. **Query Modes (`query_property_mls`)**:
    - `mode = "active"`: Queries active listings in `rets_property` (`WHERE L_Status = 'Active'`). Ordered by price ascending. Supports pagination with `page` (default 1) and `limit` (default 10, max 50).
-   - `mode = "sold"`: Queries historical closed transactions in `california_sold` for the requested city within the past `months` (default 12).
+   - `mode = "sold"`: Queries historical closed transactions in `california_sold` for the requested city within the past `months` (default 12). Invoke this when the user asks for sold properties, comps, or recent sales.
    - `mode = "both"`: Queries both active listings and recent sold comps for the same city simultaneously.
 
 3. **Validation & Missing Values**:
