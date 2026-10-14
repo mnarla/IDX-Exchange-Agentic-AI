@@ -104,42 +104,57 @@ export async function handleMessage(message: string) {
 
 ---
 
-## Natural Language Property Search (Week 2)
+## Natural Language Property Search & Database Architecture (Week 2 & Week 3)
 
-Week 2 introduces the natural language front-end (`property-nlp`) for database queries against `rets_property` (Week 3):
+The pipeline connects natural language parsing (`property-nlp`) with parameterized MySQL querying and card formatting (`property-db`):
 
 ```mermaid
-flowchart LR
+flowchart TD
     Query["User Free-Text Query<br/>('3-bed condo in Irvine under $1.5M with pool')"] --> Skill["Skill Selector<br/>(skills/property-search)"]
-    Skill --> Tool["Tool: parse_property_query<br/>(property-nlp)"]
-    Tool --> Filters["Structured Filter Object<br/>{ city, maxPrice, minBeds, ... }"]
-    Filters --> DB["Week 3 Database Layer<br/>(SELECT * FROM rets_property WHERE ...)"]
+    Skill --> NLP["Tool: parse_property_query<br/>(openclaw-plugin-property-nlp)"]
+    NLP --> Filters["Structured Filter Object<br/>{ city, maxPrice, minBeds, ... }"]
+    Filters --> ToolDB["Tool: query_property_mls<br/>(openclaw-plugin-property-db)"]
+    ToolDB --> Adapter["Filter Adapter<br/>(Safe '?' parameterization)"]
+    Adapter --> Pool["MySQL Connection Pool<br/>(mysql2/promise)"]
+    Pool --> ActiveDB[("rets_property<br/>Active Listings")]
+    Pool --> SoldDB[("california_sold<br/>Historical Comps")]
+    ActiveDB --> Formatter["Card Formatter<br/>(Structured Objects & WhatsApp Markdown)"]
+    SoldDB --> Formatter
+    Formatter --> Agent["Downstream Agent Delivery"]
 ```
 
 ### Supported Filters & Mapping to `rets_property`
 
-| Filter Key | Semantics | DB Column | Target Type | Example |
-| :--- | :--- | :--- | :--- | :--- |
-| `city` | Match | `L_City` | `string \| null` | `"Irvine"`, `"Newport Beach"` |
-| `maxPrice` | Max (`<=`) | `L_SystemPrice` | `number \| null` | `1500000` |
-| `minBeds` | Min (`>=`) | `L_Keyword2` | `number \| null` | `3` |
-| `minBaths` | Min (`>=`) | `LM_Dec_3` | `number \| null` | `2.5` |
-| `minSqft` | Min (`>=`) | `LM_Int2_3` | `number \| null` | `2500` |
-| `type` | Match | `L_Type_` | `string \| null` | `"Condominium"`, `"SingleFamilyResidence"` |
-| `pool` | Flag | `PoolPrivateYN` | `"True" \| null` | `"True"` |
-| `hasView` | Flag | `ViewYN` | `"True" \| null` | `"True"` |
-| `maxHOA` | Max (`<=`) | `AssociationFee` | `number \| null` | `400` |
+| Filter Key | Semantics | DB Column | Target Type | Example | DB Storage Format |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `city` | Match | `L_City` | `string \| null` | `"Irvine"`, `"Newport Beach"` | `varchar(50)` |
+| `maxPrice` | Max (`<=`) | `L_SystemPrice` | `number \| null` | `1500000` | `int` |
+| `minBeds` | Min (`>=`) | `L_Keyword2` | `number \| null` | `3` | `int` |
+| `minBaths` | Min (`>=`) | `LM_Dec_3` | `number \| null` | `2.5` | `decimal(4,1)` |
+| `minSqft` | Min (`>=`) | `LM_Int2_3` | `number \| null` | `2500` | `int` |
+| `type` | Match | `L_Type_` | `string \| null` | `"Condominium"`, `"SingleFamilyResidence"` | `varchar(50)` |
+| `pool` | Flag | `PoolPrivateYN` | `"True" \| null` | `"True"` | `varchar(50)` (`'1'` = pool) |
+| `hasView` | Flag | `ViewYN` | `"True" \| null` | `"True"` | `varchar(50)` (`'1'` = view) |
+| `maxHOA` | Max (`<=`) | `AssociationFee` | `number \| null` | `400` | `int` |
 
 ---
 
 ## MLS Database Layer (`idx_exchange`)
 
-When property queries are executed in upcoming weeks, tools will interface with two relational datasets in MySQL:
+When property queries are executed, tools interface with two relational datasets in MySQL via `property-db`:
 
-* **Active Listings (`rets_property`)**: 55,000+ current California listings with price, address, beds, baths, square footage, and full-text searchable agent remarks (`ft_remarks`).
-* **Historical Comps (`california_sold`)**: 98,000+ closed sales (2021–2025) used for pricing comps, DOM (days on market), and valuation trends.
-* **Correlation**: Active and sold tables are not joined on listing IDs (as their ID sets do not overlap). Instead, comps are queried by geographic and physical similarity: city/ZIP, bedrooms, square footage, and recent close-date windows.
-* **Planned Safety Guardrail**: Every database query enforces `LIMIT <= 50` to prevent token window saturation and bulk data exfiltration.
+* **Active Listings (`rets_property`)**: 55,212 active listings with price, address, beds, baths, square footage, and property amenities.
+  - Query function: `searchActiveListings(filters, page, limit)`
+  - Safe pagination: requests `limit + 1` rows to calculate `hasMore` without expensive `COUNT(*)` scans.
+  - Sorting: strictly `ORDER BY L_SystemPrice ASC, L_ListingID ASC`.
+* **Historical Comps (`california_sold`)**: 98,552 closed sales used for pricing comps, DOM, and valuation trends.
+  - Query function: `getSoldComps(city, months)`
+  - Filters to `PropertyType = "Residential"` and closes within the last N months.
+* **Security & Invariant Guarantees**:
+  - Read-only queries only (`SELECT`). No `INSERT`, `UPDATE`, `DELETE`, or DDL.
+  - 100% parameterization with `?` placeholders. Zero user/filter string interpolation.
+  - Strict pagination clamp (limit between 1 and 50) preventing context saturation.
+  - Graceful formatting: WhatsApp-friendly bulleted text (no tables), never printing `"null"` or `"undefined"`.
 
 ---
 
