@@ -1,0 +1,19 @@
+{
+  "id": "property-db",
+  "name": "Property DB",
+  "description": "MLS database query layer for active listings and sold comps, returning formatted property cards.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "query_property_mls"
+    ]
+  }
+}
