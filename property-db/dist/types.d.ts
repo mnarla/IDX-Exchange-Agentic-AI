@@ -62,6 +62,7 @@ export interface FormattedActiveCard {
     hasFireplace: boolean;
     agentName: string | null;
     officeName: string | null;
+    photoCount: number | null;
     text: string;
 }
 export interface FormattedSoldCard {

@@ -64,6 +64,9 @@ export function formatActiveCard(row) {
     if (amenities.length > 0) {
         lines.push(`✨ Amenities: ${amenities.join(", ")}`);
     }
+    if (row.PhotoCount !== null && row.PhotoCount !== undefined && row.PhotoCount > 0) {
+        lines.push(`📷 Photos: ${row.PhotoCount}`);
+    }
     if (row.L_ListingID?.trim()) {
         lines.push(`🆔 Listing ID: ${row.L_ListingID.trim()}`);
     }
@@ -86,6 +89,7 @@ export function formatActiveCard(row) {
         hasFireplace,
         agentName,
         officeName,
+        photoCount: row.PhotoCount ?? null,
         text: cardText,
     };
 }

@@ -261,6 +261,7 @@ describe("property-db plugin", () => {
 
       expect(card.price).toBe(735000);
       expect(card.listingId).toBe("1177293155");
+      expect(card.photoCount).toBe(20);
       expect(card.hasPool).toBe(true);
       expect(card.hasView).toBe(true);
       expect(card.hasFireplace).toBe(true);
@@ -269,6 +270,7 @@ describe("property-db plugin", () => {
       expect(card.text).toContain("📍 44 Fallbrook, Irvine, 92620");
       expect(card.text).toContain("💰 HOA Fee: $350/mo");
       expect(card.text).toContain("✨ Amenities: 🏊 Private Pool, 🌅 Scenic View, 🔥 Fireplace");
+      expect(card.text).toContain("📷 Photos: 20");
     });
 
     it("handles null fields gracefully without rendering 'null' or 'undefined'", () => {
