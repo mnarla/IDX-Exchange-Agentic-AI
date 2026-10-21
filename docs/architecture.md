@@ -180,3 +180,52 @@ Tool: get_current_time({ "timezone": "America/Chicago" })
 [Outbound WhatsApp Delivery]
 Assistant: "It is currently 5:41 PM (CDT) on Monday, September 28, 2026 in Chicago."
 ```
+
+---
+
+## Conversational Multi-Turn Agent Architecture (Week 4)
+
+In Week 4, the agent evolves from a single-turn parser into a stateful, multi-turn conversational agent that maintains user session memory, asks targeted clarifying follow-up questions, and iteratively refines database search criteria:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Buyer (WhatsApp)
+    participant Channel as WhatsApp Gateway
+    participant Agent as OpenClaw Agent
+    participant Session as Session Memory (UserSession)
+    participant NLP as parse_property_query
+    participant DB as query_property_mls (rets_property)
+
+    %% Turn 1
+    User->>Channel: "Find homes in Irvine"
+    Channel->>Agent: Inbound Message
+    Agent->>NLP: parse_property_query("Find homes in Irvine")
+    NLP-->>Agent: { city: "Irvine" }
+    Agent->>Session: updateSession(userId, { city: "Irvine", conversationStep: 1 })
+    Agent-->>User: "What is your budget?"
+
+    %% Turn 2
+    User->>Channel: "Under $1.2M"
+    Channel->>Agent: Inbound Message
+    Agent->>NLP: parse_property_query("Under $1.2M")
+    NLP-->>Agent: { maxPrice: 1200000 }
+    Agent->>Session: updateSession(userId, { maxPrice: 1200000, conversationStep: 2 })
+    Agent-->>User: "Any preferences — condo, townhome, or single family?"
+
+    %% Turn 3
+    User->>Channel: "Single family with at least 3 beds"
+    Channel->>Agent: Inbound Message
+    Agent->>NLP: parse_property_query("Single family with at least 3 beds")
+    NLP-->>Agent: { type: "SingleFamilyResidence", minBeds: 3 }
+    Agent->>Session: updateSession(userId, { type: "SingleFamilyResidence", beds: 3, conversationStep: 3 })
+    Agent->>DB: query_property_mls({ filters: { city: "Irvine", maxPrice: 1200000, type: "SingleFamilyResidence", minBeds: 3 }, mode: "active" })
+    DB-->>Agent: Property cards with address, price, beds/baths, photo count
+    Agent-->>User: Formatted WhatsApp listings with photo count
+```
+
+### Deliverable Guarantees
+1. **Stateful Session Memory**: Tracks `city`, `maxPrice`, `beds`, `baths`, `type`, `pool`, `lastResults`, and `conversationStep` per user.
+2. **Follow-Up Questions**: Detects missing critical fields (budget, property type) and prompts progressively before querying.
+3. **Photo Count Deliverable**: Listing cards outputted over WhatsApp explicitly present `📷 Photos: <count>` along with bold formatted price, specs, and address.
+

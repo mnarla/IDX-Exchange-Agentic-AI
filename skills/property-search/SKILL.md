@@ -1,51 +1,86 @@
 ---
 name: property-search
-description: Real estate search skill that parses natural language buyer queries and queries active MLS listings (rets_property) and sold comps (california_sold).
+description: Conversational real estate search skill that maintains multi-turn session memory, asks follow-up clarifying questions, refines queries iteratively, and queries active MLS listings (rets_property) and sold comps (california_sold).
 metadata:
   openclaw:
     tools:
       - parse_property_query
+      - get_user_session
+      - update_user_session
+      - clear_user_session
       - query_property_mls
 ---
 
-# Property Search Skill
+# Property Search Skill — Conversational Property Search Agent
 
 ## Purpose
-Enables end-to-end natural language property searching and historical comps analysis. It converts free-text buyer requests (e.g., "Show me 3-bedroom condos in Irvine under $1.5M with a pool") into structured filter parameters and queries the MLS relational database tables (`rets_property` and `california_sold`), returning structured objects and WhatsApp-friendly property cards.
+Enables a multi-turn conversational real estate search experience. The agent remembers search preferences across conversation turns within a user session, asks targeted follow-up clarifying questions when search parameters are missing, progressively refines queries iteratively, and returns matching listings from the MLS relational database tables (`rets_property` and `california_sold`) with formatted property cards including photo counts.
 
-## Filter Schema & Column Mapping
+## Session Memory Schema (`UserSession`)
 
-The natural language parser (`parse_property_query`) extracts structured filter parameters with explicit comparison semantics for the database layer (`query_property_mls`):
+Session memory tracks the active buyer profile across turns:
 
-| Filter Key | Semantics | `rets_property` Column | Type | Example / Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **`city`** | Exact match | `L_City` | `string \| null` | `"Irvine"`, `"Newport Beach"` |
-| **`maxPrice`** | Maximum limit (`<=`) | `L_SystemPrice` | `number \| null` | `1500000` (e.g. from `"$1.5M"`, `"850k"`) |
-| **`minBeds`** | Minimum threshold (`>=`)| `L_Keyword2` | `number \| null` | `3` (e.g. from `"3 bed"`, `"3+ beds"`, `"three bedroom"`) |
-| **`minBaths`** | Minimum threshold (`>=`)| `LM_Dec_3` | `number \| null` | `2.5` (e.g. from `"2.5 bath"`, `"two and a half baths"`) |
-| **`minSqft`** | Minimum threshold (`>=`)| `LM_Int2_3` | `number \| null` | `2500` (e.g. from `"at least 2500 sq ft"`, `"2500+ sqft"`) |
-| **`type`** | Exact match | `L_Type_` | `string \| null` | `"Condominium"`, `"SingleFamilyResidence"`, `"Townhouse"`, `"UnimprovedLand"` |
-| **`pool`** | Flag (`'1'` in DB) | `PoolPrivateYN` | `"True" \| null` | `"True"` if private pool requested |
-| **`hasView`** | Flag (`'1'` in DB) | `ViewYN` | `"True" \| null` | `"True"` if view requested |
-| **`maxHOA`** | Maximum limit (`<=`) | `AssociationFee` | `number \| null` | `400` (parsed before price to avoid number collisions) |
+```typescript
+interface UserSession {
+  city?: string;
+  maxPrice?: number;
+  beds?: number;
+  baths?: number;
+  type?: string;
+  pool?: string;
+  lastResults?: ListingRow[];
+  conversationStep: number;
+}
+```
+
+- **`getSession(userId)`**: Fetches or initializes a session for the WhatsApp user (defaults `conversationStep: 0`).
+- **`updateSession(userId, updates)`**: Merges newly parsed criteria with existing preferences without overwriting unmentioned fields.
+- **`clearSession(userId)`**: Resets session memory when the user wants to start over (e.g., "reset", "start new search").
+
+## Multi-Turn Conversational Lifecycle
+
+The agent progressively builds the search query through natural conversation:
+
+1. **Turn 1 — Initial Intent & Location**:
+   - User expresses search intent (e.g., *"Find homes in Irvine"*).
+   - Agent parses criteria via `parse_property_query` and updates session (`city: "Irvine"`, `conversationStep: 1`).
+   - If budget is missing, agent asks: *"What is your budget?"*
+
+2. **Turn 2 — Budget Clarification**:
+   - User answers with budget (e.g., *"Under $1.2M"*).
+   - Agent extracts price and updates session (`maxPrice: 1200000`, `conversationStep: 2`).
+   - If property type / beds are missing, agent asks: *"Any preferences — condo, townhome, or single family?"*
+
+3. **Turn 3 — Property Type & Criteria Refinement**:
+   - User responds with preferences (e.g., *"Single family with at least 3 beds"*).
+   - Agent updates session (`type: "SingleFamilyResidence"`, `beds: 3`, `conversationStep: 3`).
+   - Once core criteria (city, budget, type/beds) are collected, or when the user requests listings, execute the query immediately.
+
+4. **Iterative Refinements**:
+   - User can refine further at any time (e.g., *"With a private pool"*, *"Must have 2+ baths"*).
+   - The agent retains existing criteria (`city`, `maxPrice`, `beds`) and applies the refinement.
 
 ## Tool & Query Rules
 
-1. **Query Workflow**:
-   - For any user query expressing real estate search criteria, execute the complete search in the **same turn**:
-     1. First invoke `parse_property_query(query: string)`.
-     2. Immediately invoke `query_property_mls(filters: parsedFilters, mode: "active")`. Do NOT ask for confirmation before querying; execute the database search immediately.
-     3. Present the returned property cards (`result.text`) directly to the user.
+1. **Session-Aware Execution**:
+   - Extract newly mentioned filters with `parse_property_query(query)`.
+   - Update user session state via `update_user_session(userId, updates)`.
+   - If key parameters are still needed to avoid returning an overly broad search:
+     - Ask the targeted follow-up question.
+   - When criteria are sufficient or user asks for listings:
+     - Call `query_property_mls(filters: accumulatedSessionFilters, mode: "active")`.
+     - Save returned cards to `lastResults` in the session.
+     - Present the listings cleanly formatted.
 
-2. **Query Modes (`query_property_mls`)**:
-   - `mode = "active"`: Queries active listings in `rets_property` (`WHERE L_Status = 'Active'`). Ordered by price ascending. Supports pagination with `page` (default 1) and `limit` (default 10, max 50).
-   - `mode = "sold"`: Queries historical closed transactions in `california_sold` for the requested city within the past `months` (default 12). Invoke this when the user asks for sold properties, comps, or recent sales.
-   - `mode = "both"`: Queries both active listings and recent sold comps for the same city simultaneously.
+2. **Listing Output Deliverable**:
+   - Present results using clean WhatsApp markdown cards with:
+     - **Address** (📍 `L_Address, L_City, L_Zip`)
+     - **Price** (bold currency format: `*$1,150,000*`)
+     - **Beds / Baths / SqFt** (`3 Beds • 2 Baths • 1,850 SqFt`)
+     - **Photo Count** (📷 `Photos: N`)
+     - **Amenities** (🏊 Private Pool, 🌅 Scenic View, etc.)
+   - Do NOT use markdown tables; use mobile-friendly bulleted property cards.
 
-3. **Validation & Missing Values**:
-   - **City requirement**: When calling in `"sold"` or `"both"` mode, `city` is **mandatory**. If `city` is missing or null, do not query the database; prompt the user for their desired city first.
-   - **Missing & Default Filter Keys**: Unmentioned filter criteria evaluate to `null`. The query generator automatically omits `WHERE` clauses for `null` keys.
-   - Non-real-estate queries: All filter fields return `null`, allowing graceful fallbacks.
+3. **Resetting Session**:
+   - If the user says *"start over"*, *"reset"*, or *"new search"*, call `clear_user_session(userId)` and acknowledge that search preferences have been reset.
 
-4. **Card Output**:
-   - `query_property_mls` returns both structured JSON properties and pre-rendered plain text / WhatsApp markdown cards (avoiding markdown tables for mobile readability).
