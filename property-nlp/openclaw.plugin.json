@@ -13,7 +13,10 @@
   },
   "contracts": {
     "tools": [
-      "parse_property_query"
+      "parse_property_query",
+      "get_user_session",
+      "update_user_session",
+      "clear_user_session"
     ]
   }
 }

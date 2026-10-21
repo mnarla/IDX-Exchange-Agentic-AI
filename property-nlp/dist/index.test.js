@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import entry, { parsePropertyQuery } from "./index.js";
+import entry, { parsePropertyQuery, getSession, updateSession, clearSession, getNextFollowUpQuestion, } from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 describe("property-nlp plugin", () => {
     it("declares tool metadata correctly", () => {
         const metadata = getToolPluginMetadata(entry);
-        expect(metadata?.tools.map((t) => t.name)).toEqual(["parse_property_query"]);
+        expect(metadata?.tools.map((t) => t.name)).toEqual([
+            "parse_property_query",
+            "get_user_session",
+            "update_user_session",
+            "clear_user_session",
+        ]);
         expect(metadata?.tools[0]?.description).toContain("minBeds, minBaths, and minSqft are minimum thresholds (>=)");
         expect(metadata?.tools[0]?.description).toContain("maxPrice and maxHOA are maximum thresholds (<=)");
     });
@@ -218,6 +223,97 @@ describe("property-nlp plugin", () => {
                 pool: null,
                 hasView: null,
                 maxHOA: null,
+            });
+        });
+    });
+    describe("Session Memory Implementation (Week 4 Specification)", () => {
+        const testUser = "whatsapp:+19495550199";
+        it("initializes a new session with conversationStep 0", () => {
+            clearSession(testUser);
+            const session = getSession(testUser);
+            expect(session).toEqual({ conversationStep: 0 });
+        });
+        it("updates session preferences iteratively and preserves previous criteria", () => {
+            clearSession(testUser);
+            // Step 1: User says 'Find homes in Irvine'
+            let session = updateSession(testUser, { city: "Irvine", conversationStep: 1 });
+            expect(session.city).toBe("Irvine");
+            expect(session.conversationStep).toBe(1);
+            // Step 2: User says 'Under $1.2M'
+            session = updateSession(testUser, { maxPrice: 1200000, conversationStep: 2 });
+            expect(session.city).toBe("Irvine");
+            expect(session.maxPrice).toBe(1200000);
+            expect(session.conversationStep).toBe(2);
+            // Step 3: User says 'Single family with at least 3 beds'
+            session = updateSession(testUser, {
+                type: "SingleFamilyResidence",
+                beds: 3,
+                conversationStep: 3,
+            });
+            expect(session.city).toBe("Irvine");
+            expect(session.maxPrice).toBe(1200000);
+            expect(session.type).toBe("SingleFamilyResidence");
+            expect(session.beds).toBe(3);
+            expect(session.conversationStep).toBe(3);
+        });
+        it("clears session correctly", () => {
+            updateSession(testUser, { city: "Irvine" });
+            clearSession(testUser);
+            const fresh = getSession(testUser);
+            expect(fresh).toEqual({ conversationStep: 0 });
+        });
+        it("maintains session isolation across different users", () => {
+            const userA = "whatsapp:+11111111111";
+            const userB = "whatsapp:+22222222222";
+            clearSession(userA);
+            clearSession(userB);
+            updateSession(userA, { city: "Irvine", maxPrice: 1500000 });
+            updateSession(userB, { city: "Newport Beach", maxPrice: 3000000 });
+            expect(getSession(userA).city).toBe("Irvine");
+            expect(getSession(userA).maxPrice).toBe(1500000);
+            expect(getSession(userB).city).toBe("Newport Beach");
+            expect(getSession(userB).maxPrice).toBe(3000000);
+        });
+        it("simulates the exact Week 4 handbook multi-turn conversation flow", async () => {
+            const convUser = "whatsapp:+19495550200";
+            clearSession(convUser);
+            // Turn 1: User: "Find homes in Irvine"
+            const turn1Parsed = await parsePropertyQuery("Find homes in Irvine");
+            expect(turn1Parsed.city).toBe("Irvine");
+            updateSession(convUser, {
+                city: turn1Parsed.city ?? undefined,
+                type: turn1Parsed.type ?? undefined,
+                conversationStep: 1,
+            });
+            let session = getSession(convUser);
+            expect(getNextFollowUpQuestion(session)).toBe("What is your budget?");
+            // Turn 2: User: "Under $1.2M"
+            const turn2Parsed = await parsePropertyQuery("Under $1.2M");
+            expect(turn2Parsed.maxPrice).toBe(1200000);
+            updateSession(convUser, {
+                maxPrice: turn2Parsed.maxPrice ?? undefined,
+                conversationStep: 2,
+            });
+            session = getSession(convUser);
+            expect(getNextFollowUpQuestion(session)).toBe("Any preferences — condo, townhome, or single family?");
+            // Turn 3: User: "Single family with at least 3 beds"
+            const turn3Parsed = await parsePropertyQuery("Single family with at least 3 beds");
+            expect(turn3Parsed.type).toBe("SingleFamilyResidence");
+            expect(turn3Parsed.minBeds).toBe(3);
+            updateSession(convUser, {
+                type: turn3Parsed.type ?? undefined,
+                beds: turn3Parsed.minBeds ?? undefined,
+                conversationStep: 3,
+            });
+            session = getSession(convUser);
+            // Now all primary criteria are known!
+            expect(getNextFollowUpQuestion(session)).toBeNull();
+            expect(session).toMatchObject({
+                city: "Irvine",
+                maxPrice: 1200000,
+                type: "SingleFamilyResidence",
+                beds: 3,
+                conversationStep: 3,
             });
         });
     });

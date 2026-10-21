@@ -1,5 +1,7 @@
 import { Type } from "typebox";
 import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
+import { getSession, updateSession, clearSession, } from "./session.js";
+export * from "./session.js";
 const NUMBER_WORDS = {
     one: 1,
     two: 2,
@@ -151,6 +153,52 @@ export default defineToolPlugin({
             }),
             execute: async ({ query }) => {
                 return await parsePropertyQuery(query);
+            },
+        }),
+        tool({
+            name: "get_user_session",
+            description: "Get or initialize conversational search session memory for a given user.",
+            parameters: Type.Object({
+                userId: Type.String({
+                    description: "Unique user identifier (e.g. phone number or WhatsApp user ID)",
+                }),
+            }),
+            execute: async ({ userId }) => {
+                return getSession(userId);
+            },
+        }),
+        tool({
+            name: "update_user_session",
+            description: "Update the user's conversational search preferences and advance conversation step.",
+            parameters: Type.Object({
+                userId: Type.String({
+                    description: "Unique user identifier",
+                }),
+                updates: Type.Object({
+                    city: Type.Optional(Type.String()),
+                    maxPrice: Type.Optional(Type.Number()),
+                    beds: Type.Optional(Type.Number()),
+                    baths: Type.Optional(Type.Number()),
+                    type: Type.Optional(Type.String()),
+                    pool: Type.Optional(Type.String()),
+                    conversationStep: Type.Optional(Type.Number()),
+                }),
+            }),
+            execute: async ({ userId, updates }) => {
+                return updateSession(userId, updates);
+            },
+        }),
+        tool({
+            name: "clear_user_session",
+            description: "Reset conversational search preferences and session for a given user.",
+            parameters: Type.Object({
+                userId: Type.String({
+                    description: "Unique user identifier",
+                }),
+            }),
+            execute: async ({ userId }) => {
+                clearSession(userId);
+                return { success: true, message: `Session cleared for user ${userId}` };
             },
         }),
     ],
