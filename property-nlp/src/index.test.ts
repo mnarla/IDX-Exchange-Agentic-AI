@@ -355,4 +355,22 @@ describe("property-nlp plugin", () => {
       });
     });
   });
+
+  describe("Week 5: Market Statistics Query Parsing", () => {
+    it("parses 'Is now a good time to buy in San Diego?'", async () => {
+      const res = await parsePropertyQuery("Is now a good time to buy in San Diego?");
+      expect(res.city).toBe("San Diego");
+    });
+
+    it("parses 'What is the average price per sq ft in Pasadena?'", async () => {
+      const res = await parsePropertyQuery("What is the average price per sq ft in Pasadena?");
+      expect(res.city).toBe("Pasadena");
+    });
+
+    it("parses 'How is the housing market in Irvine?'", async () => {
+      const res = await parsePropertyQuery("How is the housing market in Irvine?");
+      expect(res.city).toBe("Irvine");
+    });
+  });
 });
+

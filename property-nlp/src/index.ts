@@ -131,17 +131,19 @@ export async function parsePropertyQuery(query: string): Promise<PropertyFilter>
     const hasView = /\bview\b/i.test(query) ? "True" : null;
 
     // 8. Parse City
-    const cityMatch = query.match(/(?:in|around)\s+([A-Za-z\s]+?)(?:\s+(?:under|with|at|for|having|\$)|,|$|\.)/i)
-      || query.match(/in ([A-Za-z\s]+?)(?:\s+under|\s+with|\s+at|$)/i);
+    const cityMatch = query.match(/(?:in|around)\s+([A-Za-z\s]+?)(?:\s+(?:under|with|at|for|having|\$)|[.,?!]|$)/i)
+      || query.match(/in\s+([A-Za-z\s]+?)(?:\s+under|\s+with|\s+at|[.,?!]|$)/i);
 
     let city: string | null = null;
     if (cityMatch) {
-      const candidate = cityMatch[1].trim().replace(/[.,]$/, "");
+      const candidate = cityMatch[1].trim().replace(/[.,?!]+$/, "");
       // Filter out non-city phrases or qualifiers
       if (candidate && !/^(?:at\s+least|\d|a\s+view|a\s+pool)/i.test(candidate)) {
         city = candidate;
       }
     }
+
+    const isMarketOrRealEstateQuery = /\b(?:good time to buy|price per sq\s*ft|price\/sqft|market|stats|statistics|comps|housing market|real estate)\b/i.test(query);
 
     // Non-real-estate query safety guard:
     // If no real estate criteria matched, do not classify accidental text as a search
@@ -152,11 +154,13 @@ export async function parsePropertyQuery(query: string): Promise<PropertyFilter>
       || minSqft !== null
       || pool !== null
       || hasView !== null
-      || maxHOA !== null;
+      || maxHOA !== null
+      || (isMarketOrRealEstateQuery && city !== null);
 
     if (!hasAnyRealEstateCriteria) {
       return createEmptyFilter();
     }
+
 
     return {
       city,
