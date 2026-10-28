@@ -153,3 +153,102 @@ export function formatSoldCard(row) {
         text: cardText,
     };
 }
+export function formatMarketSummaryCard(stats) {
+    const lines = [];
+    const loc = stats.zip ? `${stats.city} (${stats.zip})` : stats.city;
+    lines.push(`📊 *${loc} Market Statistics (Past ${stats.months} Months)*\n`);
+    if (stats.soldCount === 0) {
+        lines.push(`No residential sold records found in ${stats.city} for the past ${stats.months} months.`);
+        if (stats.activeCount !== null) {
+            lines.push(`\n• *Active Listings in MLS:* ${stats.activeCount}`);
+        }
+        return lines.join("\n");
+    }
+    // Core metrics
+    if (stats.medianClosePrice !== null) {
+        lines.push(`• *Median Close Price:* ${formatCurrency(stats.medianClosePrice)}`);
+    }
+    if (stats.avgClosePrice !== null) {
+        lines.push(`• *Average Close Price:* ${formatCurrency(stats.avgClosePrice)}`);
+    }
+    if (stats.avgPricePerSqft !== null) {
+        lines.push(`• *Avg Price / Sq Ft:* $${formatNumber(stats.avgPricePerSqft)}/sq ft`);
+    }
+    if (stats.avgDom !== null) {
+        lines.push(`• *Avg Days on Market:* ${stats.avgDom} days`);
+    }
+    if (stats.listToClosePct !== null) {
+        let leverageNote = "";
+        if (stats.listToClosePct >= 101)
+            leverageNote = " (Strong seller leverage / bidding over ask)";
+        else if (stats.listToClosePct >= 99)
+            leverageNote = " (Competitive / near asking price)";
+        else if (stats.listToClosePct >= 97)
+            leverageNote = " (Moderate buyer negotiation room)";
+        else
+            leverageNote = " (Significant buyer negotiation leverage)";
+        lines.push(`• *List-to-Close Ratio:* ${stats.listToClosePct}%${leverageNote}`);
+    }
+    lines.push(`• *Total Sold Volume:* ${stats.soldCount} homes`);
+    if (stats.activeCount !== null) {
+        lines.push(`• *Active Inventory:* ${stats.activeCount} active listings`);
+    }
+    if (stats.monthsOfInventory !== null) {
+        let moiNote = "";
+        if (stats.monthsOfInventory < 3)
+            moiNote = " (Tight supply • Seller's market)";
+        else if (stats.monthsOfInventory <= 6)
+            moiNote = " (Balanced supply)";
+        else
+            moiNote = " (High inventory • Buyer's market)";
+        lines.push(`• *Months of Inventory:* ${stats.monthsOfInventory} mos${moiNote}`);
+    }
+    // Monthly trends
+    if (stats.trends && stats.trends.length > 0) {
+        lines.push(`\n📈 *Monthly Price Trends (Recent):*`);
+        const recentTrends = stats.trends.slice(-6);
+        for (const t of recentTrends) {
+            const parts = [];
+            if (t.avgPrice !== null)
+                parts.push(formatCurrency(t.avgPrice) || "");
+            parts.push(`${t.sales} sales`);
+            if (t.avgDom !== null)
+                parts.push(`${t.avgDom} DOM`);
+            let changeStr = "";
+            if (t.priceChangePct !== null) {
+                const sign = t.priceChangePct >= 0 ? "+" : "";
+                changeStr = ` [${sign}${t.priceChangePct}% MoM]`;
+            }
+            lines.push(`• ${t.month}: ${parts.join(" • ")}${changeStr}`);
+        }
+        const latest = stats.trends[stats.trends.length - 1];
+        if (latest && latest.yoyPriceChangePct !== null) {
+            const sign = latest.yoyPriceChangePct >= 0 ? "+" : "";
+            lines.push(`• *12-Month YoY Price Change:* ${sign}${latest.yoyPriceChangePct}%`);
+        }
+    }
+    // Market Assessment / Buyer Advice
+    lines.push(`\n💡 *Market Assessment:*`);
+    const adviceParts = [];
+    if (stats.marketType === "Seller's Market") {
+        adviceParts.push(`The market in ${stats.city} currently favors sellers due to ${stats.monthsOfInventory !== null ? `${stats.monthsOfInventory} months of inventory` : "tight inventory"} and homes moving quickly (${stats.avgDom ?? "low"} avg DOM).`);
+        if (stats.listToClosePct && stats.listToClosePct >= 100) {
+            adviceParts.push(`Homes are selling at or above list price (${stats.listToClosePct}%), so buyers should be prepared with strong pre-approvals and fast decisions.`);
+        }
+        else {
+            adviceParts.push(`Buyers should act decisively on well-priced listings.`);
+        }
+    }
+    else if (stats.marketType === "Buyer's Market") {
+        adviceParts.push(`The market in ${stats.city} leans in favor of buyers with ${stats.monthsOfInventory !== null ? `${stats.monthsOfInventory} months of inventory` : "elevated inventory"} and listings averaging ${stats.avgDom ?? 60}+ days on market.`);
+        if (stats.listToClosePct) {
+            adviceParts.push(`With a list-to-close ratio of ${stats.listToClosePct}%, buyers have good leverage to negotiate price reductions and seller concessions.`);
+        }
+    }
+    else {
+        adviceParts.push(`The market in ${stats.city} is currently balanced. Inventory stands at ${stats.monthsOfInventory ?? "approx. 4-5"} months with average DOM at ${stats.avgDom ?? 35} days.`);
+        adviceParts.push(`Buyers face fair competition and can negotiate reasonably without facing extreme bidding wars.`);
+    }
+    lines.push(adviceParts.join(" "));
+    return lines.join("\n");
+}

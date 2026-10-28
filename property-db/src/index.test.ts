@@ -6,12 +6,17 @@ import entry, {
   adaptFiltersToSQL,
   formatActiveCard,
   formatSoldCard,
+  formatMarketSummaryCard,
+  getMarketStatistics,
+  calculateMedian,
+  calculateMonthlyTrends,
+  calculateMarketClimate,
   setMockQuery,
   getRequiredEnv,
 } from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { parsePropertyQuery } from "openclaw-plugin-property-nlp";
-import type { ActiveListingRow, SoldCompRow } from "./types.js";
+import type { ActiveListingRow, SoldCompRow, MonthlyTrendRawRow } from "./types.js";
 
 describe("property-db plugin", () => {
   beforeEach(() => {
@@ -24,12 +29,17 @@ describe("property-db plugin", () => {
   });
 
   describe("tool metadata", () => {
-    it("registers query_property_mls tool correctly", () => {
+    it("registers query_property_mls and get_market_statistics tools correctly", () => {
       const metadata = getToolPluginMetadata(entry);
-      expect(metadata?.tools.map((t) => t.name)).toEqual(["query_property_mls"]);
+      expect(metadata?.tools.map((t) => t.name)).toEqual([
+        "query_property_mls",
+        "get_market_statistics",
+      ]);
       expect(metadata?.tools[0]?.description).toContain("Query active MLS listings");
+      expect(metadata?.tools[1]?.description).toContain("market analytics");
     });
   });
+
 
   describe("environment variable safety", () => {
     it("throws a clear error when required MYSQL environment variables are missing", () => {
@@ -426,5 +436,288 @@ describe("property-db plugin", () => {
         expect(res.text).toContain("Found 1 recent sold comp");
       }
     });
+
+    it("executes stats mode via queryPropertyMls", async () => {
+      setMockQuery(async (sql) => {
+        if (sql.includes("COUNT(*)                                              AS sold_count")) {
+          return [
+            {
+              City: "Pasadena",
+              sold_count: 50,
+              avg_close_price: 1200000,
+              avg_price_per_sqft: 750,
+              avg_dom: 25,
+              list_to_close_pct: 101.5,
+            },
+          ];
+        }
+        if (sql.includes("SELECT ClosePrice")) {
+          return [{ ClosePrice: 1100000 }, { ClosePrice: 1200000 }, { ClosePrice: 1300000 }];
+        }
+        if (sql.includes("COUNT(*) AS active_count")) {
+          return [{ active_count: 10 }];
+        }
+        if (sql.includes("GROUP BY DATE_FORMAT(CloseDate")) {
+          return [
+            {
+              month: "2026-09",
+              sales: 25,
+              avg_price: 1180000,
+              avg_price_per_sqft: 740,
+              avg_dom: 24,
+              list_to_close_pct: 101.2,
+            },
+            {
+              month: "2026-10",
+              sales: 25,
+              avg_price: 1220000,
+              avg_price_per_sqft: 760,
+              avg_dom: 26,
+              list_to_close_pct: 101.8,
+            },
+          ];
+        }
+        return [];
+      });
+
+      const res = await queryPropertyMls({
+        mode: "stats",
+        city: "Pasadena",
+      });
+
+      expect("mode" in res && res.mode === "stats").toBe(true);
+      if ("mode" in res && res.mode === "stats") {
+        expect(res.city).toBe("Pasadena");
+        expect(res.soldCount).toBe(50);
+        expect(res.medianClosePrice).toBe(1200000);
+        expect(res.avgClosePrice).toBe(1200000);
+        expect(res.avgPricePerSqft).toBe(750);
+        expect(res.listToClosePct).toBe(101.5);
+        expect(res.marketType).toBe("Seller's Market");
+        expect(res.text).toContain("Pasadena Market Statistics");
+        expect(res.text).toContain("Seller's market");
+      }
+    });
+  });
+
+  describe("Week 5: Market Statistics Engine", () => {
+    describe("calculateMedian", () => {
+      it("returns null for empty array", () => {
+        expect(calculateMedian([])).toBeNull();
+      });
+
+      it("returns exact middle element for odd length array", () => {
+        expect(calculateMedian([900000, 1200000, 1500000])).toBe(1200000);
+      });
+
+      it("returns rounded average of two middle elements for even length array", () => {
+        expect(calculateMedian([800000, 900000, 1100000, 1400000])).toBe(1000000);
+      });
+
+      it("handles unsorted numbers correctly", () => {
+        expect(calculateMedian([1500000, 800000, 1200000])).toBe(1200000);
+      });
+    });
+
+    describe("calculateMonthlyTrends", () => {
+      it("returns empty array for empty inputs", () => {
+        expect(calculateMonthlyTrends([])).toEqual([]);
+      });
+
+      it("calculates MoM and YoY price change percentages accurately", () => {
+        const rawRows: MonthlyTrendRawRow[] = [
+          {
+            month: "2025-10",
+            sales: 20,
+            avg_price: 1000000,
+            avg_price_per_sqft: 600,
+            avg_dom: 30,
+            list_to_close_pct: 99.0,
+          },
+          {
+            month: "2026-09",
+            sales: 25,
+            avg_price: 1050000,
+            avg_price_per_sqft: 630,
+            avg_dom: 28,
+            list_to_close_pct: 100.0,
+          },
+          {
+            month: "2026-10",
+            sales: 30,
+            avg_price: 1100000,
+            avg_price_per_sqft: 660,
+            avg_dom: 25,
+            list_to_close_pct: 100.5,
+          },
+        ];
+
+        const trends = calculateMonthlyTrends(rawRows);
+        expect(trends.length).toBe(3);
+
+        // First month has no previous month MoM
+        expect(trends[0]?.priceChangePct).toBeNull();
+        expect(trends[0]?.yoyPriceChangePct).toBeNull();
+
+        // Second month: (1050000 - 1000000) / 1000000 = +5.0%
+        expect(trends[1]?.priceChangePct).toBe(5.0);
+
+        // Third month MoM: (1100000 - 1050000) / 1050000 = +4.8%
+        expect(trends[2]?.priceChangePct).toBe(4.8);
+
+        // Third month YoY (2026-10 vs 2025-10): (1100000 - 1000000) / 1000000 = +10.0%
+        expect(trends[2]?.yoyPriceChangePct).toBe(10.0);
+      });
+    });
+
+    describe("calculateMarketClimate", () => {
+      it("identifies Seller's Market when inventory is low (< 3 months)", () => {
+        expect(calculateMarketClimate(2.1, 99.5, 25)).toBe("Seller's Market");
+      });
+
+      it("identifies Buyer's Market when inventory is elevated (> 6 months)", () => {
+        expect(calculateMarketClimate(7.5, 96.0, 75)).toBe("Buyer's Market");
+      });
+
+      it("identifies Balanced Market when inventory is 3-6 months", () => {
+        expect(calculateMarketClimate(4.2, 99.0, 38)).toBe("Balanced Market");
+      });
+
+      it("falls back to list-to-close ratio if inventory is null", () => {
+        expect(calculateMarketClimate(null, 102.0, 20)).toBe("Seller's Market");
+        expect(calculateMarketClimate(null, 96.5, 70)).toBe("Buyer's Market");
+        expect(calculateMarketClimate(null, 99.2, 35)).toBe("Balanced Market");
+      });
+    });
+
+    describe("getMarketStatistics execution & safety", () => {
+      it("returns clear error if city is missing or empty", async () => {
+        const res = await getMarketStatistics({ city: "   " });
+        expect("error" in res).toBe(true);
+        if ("error" in res) {
+          expect(res.error).toContain("City is required");
+        }
+      });
+
+      it("parameterizes all inputs safely to prevent SQL injection", async () => {
+        const executedQueries: { sql: string; params: any[] }[] = [];
+
+        setMockQuery(async (sql, params = []) => {
+          executedQueries.push({ sql, params });
+          return [];
+        });
+
+        const maliciousCity = "San Diego'; DROP TABLE california_sold;--";
+        await getMarketStatistics({
+          city: maliciousCity,
+          months: 12,
+        });
+
+        for (const q of executedQueries) {
+          expect(q.sql).not.toContain("DROP TABLE");
+          expect(q.sql).not.toContain("San Diego';");
+          expect(q.params).toContain(maliciousCity);
+        }
+      });
+
+      it("computes full market statistics with inventory absorption and trends", async () => {
+        setMockQuery(async (sql) => {
+          if (sql.includes("COUNT(*)                                              AS sold_count")) {
+            return [
+              {
+                City: "San Diego",
+                sold_count: 120,
+                avg_close_price: 950000,
+                avg_price_per_sqft: 650,
+                avg_dom: 29.5,
+                list_to_close_pct: 100.2,
+              },
+            ];
+          }
+          if (sql.includes("SELECT ClosePrice")) {
+            return [
+              { ClosePrice: 800000 },
+              { ClosePrice: 900000 },
+              { ClosePrice: 920000 },
+              { ClosePrice: 1050000 },
+            ];
+          }
+          if (sql.includes("COUNT(*) AS active_count")) {
+            return [{ active_count: 20 }];
+          }
+          if (sql.includes("GROUP BY DATE_FORMAT(CloseDate")) {
+            return [
+              {
+                month: "2026-08",
+                sales: 40,
+                avg_price: 930000,
+                avg_price_per_sqft: 640,
+                avg_dom: 31,
+                list_to_close_pct: 99.8,
+              },
+              {
+                month: "2026-09",
+                sales: 40,
+                avg_price: 950000,
+                avg_price_per_sqft: 650,
+                avg_dom: 29,
+                list_to_close_pct: 100.2,
+              },
+            ];
+          }
+          return [];
+        });
+
+        const res = await getMarketStatistics({
+          city: "San Diego",
+          months: 12,
+        });
+
+        expect("mode" in res && res.mode === "stats").toBe(true);
+        if ("mode" in res && res.mode === "stats") {
+          expect(res.city).toBe("San Diego");
+          expect(res.soldCount).toBe(120);
+          expect(res.avgClosePrice).toBe(950000);
+          // Median of [800k, 900k, 920k, 1050k] = (900k + 920k)/2 = 910k
+          expect(res.medianClosePrice).toBe(910000);
+          expect(res.avgPricePerSqft).toBe(650);
+          expect(res.avgDom).toBe(29.5);
+          expect(res.listToClosePct).toBe(100.2);
+          expect(res.activeCount).toBe(20);
+          // 120 sold in 12 mos = 10 sold/mo. 20 active / 10 = 2.0 mos inventory
+          expect(res.monthsOfInventory).toBe(2.0);
+          expect(res.marketType).toBe("Seller's Market");
+          expect(res.trends.length).toBe(2);
+          expect(res.trends[1]?.priceChangePct).toBe(2.2);
+
+          // Card formatting verification
+          expect(res.text).toContain("📊 *San Diego Market Statistics (Past 12 Months)*");
+          expect(res.text).toContain("• *Median Close Price:* $910,000");
+          expect(res.text).toContain("• *Avg Price / Sq Ft:* $650/sq ft");
+          expect(res.text).toContain("• *Months of Inventory:* 2 mos (Tight supply • Seller's market)");
+          expect(res.text).toContain("💡 *Market Assessment:*");
+          expect(res.text).toContain("favors sellers");
+        }
+      });
+
+      it("handles zero sales gracefully without division by zero errors", async () => {
+        setMockQuery(async () => []);
+
+        const res = await getMarketStatistics({
+          city: "GhostTown",
+          months: 12,
+        });
+
+        expect("mode" in res && res.mode === "stats").toBe(true);
+        if ("mode" in res && res.mode === "stats") {
+          expect(res.soldCount).toBe(0);
+          expect(res.medianClosePrice).toBeNull();
+          expect(res.avgClosePrice).toBeNull();
+          expect(res.monthsOfInventory).toBeNull();
+          expect(res.text).toContain("No residential sold records found in GhostTown");
+        }
+      });
+    });
   });
 });
+

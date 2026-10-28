@@ -114,3 +114,49 @@ export interface QueryErrorResult {
     error: string;
 }
 export type QueryPropertyResult = ActiveListingsResult | SoldCompsResult | BothListingsResult | QueryErrorResult;
+export interface MarketSummaryRawRow {
+    City: string;
+    sold_count: number;
+    avg_close_price: number | null;
+    avg_price_per_sqft: number | null;
+    avg_dom: number | null;
+    list_to_close_pct: number | null;
+}
+export interface MonthlyTrendRawRow {
+    month: string;
+    sales: number;
+    avg_price: number | null;
+    avg_price_per_sqft: number | null;
+    avg_dom: number | null;
+    list_to_close_pct: number | null;
+}
+export interface MonthlyTrend {
+    month: string;
+    sales: number;
+    avgPrice: number | null;
+    avgPricePerSqft: number | null;
+    avgDom: number | null;
+    listToClosePct: number | null;
+    priceChangePct: number | null;
+    yoyPriceChangePct: number | null;
+}
+export type MarketClimate = "Seller's Market" | "Buyer's Market" | "Balanced Market";
+export interface MarketStatistics {
+    mode: "stats";
+    city: string;
+    zip?: string | null;
+    propertyType: string;
+    months: number;
+    soldCount: number;
+    avgClosePrice: number | null;
+    medianClosePrice: number | null;
+    avgPricePerSqft: number | null;
+    avgDom: number | null;
+    listToClosePct: number | null;
+    activeCount: number | null;
+    monthsOfInventory: number | null;
+    marketType: MarketClimate;
+    trends: MonthlyTrend[];
+    text: string;
+}
+export type MarketStatisticsResult = MarketStatistics | QueryErrorResult;
