@@ -5,10 +5,13 @@ An OpenClaw-based multi-agent real estate assistant for an IDX Exchange internsh
 ## Repository Layout
 
 - `docs/`: Architecture documentation and query lifecycle diagrams.
-- `skills/`: OpenClaw skill definitions (e.g. `property-search` with conversational multi-turn session memory).
+- `skills/`: OpenClaw skill definitions:
+  - `property-search`: Conversational multi-turn property search with session memory.
+  - `market-stats`: Market analytics agent responding to market queries with data-backed summaries, trends, and market climate assessment.
 - `property-nlp/`: OpenClaw tool plugin providing natural language parsing and multi-turn session memory (`parse_property_query`, `get_user_session`, `update_user_session`, `clear_user_session`).
-- `property-db/`: OpenClaw tool plugin providing MLS database integration (`query_property_mls`) with photo count support.
+- `property-db/`: OpenClaw tool plugin providing MLS database integration (`query_property_mls`) and market analytics (`get_market_statistics`).
 - `time-tools/`: OpenClaw tool plugin providing the `get_current_time` tool.
+
 
 ## Environment Variables
 

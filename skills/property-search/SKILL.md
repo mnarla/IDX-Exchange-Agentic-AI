@@ -9,7 +9,9 @@ metadata:
       - update_user_session
       - clear_user_session
       - query_property_mls
+      - get_market_statistics
 ---
+
 
 # Property Search Skill — Conversational Property Search Agent
 

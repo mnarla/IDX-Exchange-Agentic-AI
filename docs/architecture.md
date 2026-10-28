@@ -229,3 +229,59 @@ sequenceDiagram
 2. **Follow-Up Questions**: Detects missing critical fields (budget, property type) and prompts progressively before querying.
 3. **Photo Count Deliverable**: Listing cards outputted over WhatsApp explicitly present `📷 Photos: <count>` along with bold formatted price, specs, and address.
 
+---
+
+## Market Statistics & Real Estate Analytics Architecture (Week 5)
+
+Week 5 introduces a market analytics engine powered by `california_sold` (historical sales) and `rets_property` (active listings) to answer analytical questions (*"Is now a good time to buy in San Diego?"*, *"What is the average price per sq ft in Pasadena?"*).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (WhatsApp)
+    participant Channel as WhatsApp Channel
+    participant Agent as OpenClaw Agent
+    participant Skills as Skill Selector (market-stats)
+    participant Tool as Tool: get_market_statistics
+    participant SoldDB as california_sold (MySQL)
+    participant ActiveDB as rets_property (MySQL)
+
+    User->>Channel: "Is now a good time to buy in San Diego?"
+    Channel->>Agent: Inbound Message
+    Agent->>Skills: Match market-stats skill
+    Skills-->>Agent: Execute get_market_statistics(city: "San Diego", months: 12)
+    Agent->>Tool: get_market_statistics({ city: "San Diego", months: 12 })
+
+    par Historical Aggregates & Comps
+        Tool->>SoldDB: SELECT COUNT(*), AVG(ClosePrice), AVG(price/sqft), AVG(DOM), AVG(Close/List)
+        SoldDB-->>Tool: Summary aggregate metrics
+    and Exact Median Close Price
+        Tool->>SoldDB: SELECT ClosePrice WHERE City = 'San Diego' ORDER BY ClosePrice ASC
+        SoldDB-->>Tool: Ordered close prices
+    and Active Inventory Count
+        Tool->>ActiveDB: SELECT COUNT(*) WHERE L_City = 'San Diego' AND L_Status = 'Active'
+        ActiveDB-->>Tool: Active listing count
+    and 12-Month Trend Series
+        Tool->>SoldDB: GROUP BY DATE_FORMAT(CloseDate, '%Y-%m') ORDER BY month ASC
+        SoldDB-->>Tool: Monthly sales, price, DOM
+    end
+
+    Note over Tool: Calculates exact median, MoM % change,<br/>YoY % change, absorption rate (MOI),<br/>and classifies market climate (Seller's/Buyer's)
+
+    Tool-->>Agent: Formatted WhatsApp market card + structured metrics
+    Agent-->>Channel: WhatsApp response with stats & market verdict
+    Channel-->>User: Delivered data-backed market advice
+```
+
+### Core Market Analytics Metrics
+
+| Metric | Source / Formula | Meaning |
+| :--- | :--- | :--- |
+| **Median Close Price** | Exact middle value of sorted `ClosePrice` from `california_sold` | Robust against multi-million dollar luxury outlier sales |
+| **Average Price / SqFt** | `AVG(ClosePrice / NULLIF(LivingArea, 0))` | Normalized pricing per square foot across neighborhoods |
+| **List-to-Close Ratio** | `(AVG(ClosePrice / NULLIF(ListPrice, 0))) * 100` | Negotiating leverage indicator (> 100% = seller leverage, < 98% = buyer leverage) |
+| **Average DOM** | `AVG(DaysOnMarket)` | Market velocity (< 30 days = hot/fast; > 60 days = slow/cooling) |
+| **Months of Inventory (MOI)** | `activeCount / (sold_volume / months)` | Absorption rate: < 3.0 mos = seller's market; 3–6 mos = balanced; > 6 mos = buyer's market |
+| **Monthly Trends & YoY** | `((P_curr - P_prev) / P_prev) * 100` | Trajectory of price appreciation or depreciation over 12/24 months |
+
+
