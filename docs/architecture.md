@@ -284,4 +284,62 @@ sequenceDiagram
 | **Months of Inventory (MOI)** | `activeCount / (sold_volume / months)` | Absorption rate: < 3.0 mos = seller's market; 3–6 mos = balanced; > 6 mos = buyer's market |
 | **Monthly Trends & YoY** | `((P_curr - P_prev) / P_prev) * 100` | Trajectory of price appreciation or depreciation over 12/24 months |
 
+---
+
+## Embeddings & Vector Search Architecture (Week 6)
+
+Week 6 introduces a semantic property search engine powered by OpenAI embeddings (`text-embedding-3-small`) and vector cosine similarity. This moves the assistant beyond rigid SQL filters, allowing buyers to search by aesthetic, architectural, or lifestyle preferences (*"charming craftsman with mountain views and character"*, *"peaceful oasis with zen garden and natural lighting"*) which are captured inside listing descriptions (`rets_property.L_Remarks`).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (WhatsApp)
+    participant Channel as WhatsApp Channel
+    participant Agent as OpenClaw Agent
+    participant Skills as Skill Selector (semantic-search)
+    participant Tool as Tool: semantic_property_search
+    participant OpenAI as OpenAI Embeddings API (text-embedding-3-small)
+    participant DB as Active MLS DB (rets_property)
+
+    User->>Channel: "Charming craftsman with mountain views and character"
+    Channel->>Agent: Inbound Message
+    Agent->>Skills: Match semantic-search skill
+    Skills-->>Agent: Execute semantic_property_search(query)
+    Agent->>Tool: semantic_property_search({ query: "charming craftsman..." })
+
+    par Generate Query Vector
+        Tool->>OpenAI: Embed query text (text-embedding-3-small)
+        OpenAI-->>Tool: 1536-dim Query Vector [q_1, q_2, ..., q_1536]
+    and Fetch Candidate Active Listings
+        Tool->>DB: SELECT listings WHERE L_Status = 'Active' AND L_Remarks != ''
+        DB-->>Tool: Active listing rows with specs and L_Remarks
+    end
+
+    Note over Tool: Synthesizes combined embedding text for each listing:<br/>Type in City, Beds, Baths, SqFt, Built Year, Price, Remarks.<br/>Computes/fetches listing embeddings [d_1, d_2, ..., d_1536].
+
+    Note over Tool: Computes cosine similarity: dot(q, d) / (||q|| * ||d||).<br/>Ranks candidates descending and slices top 5.
+
+    Tool-->>Agent: Top 5 formatted cards with match score % & remarks excerpt
+    Agent-->>Channel: Delivered WhatsApp response with top 5 semantic matches
+    Channel-->>User: WhatsApp cards displayed with similarity scores
+```
+
+### Embedding Document Construction & Cosine Similarity
+
+1. **Document Synthesis**:
+   Each active listing is represented as a structured document before embedding:
+   ```text
+   {L_Type_} in {L_City}, CA.
+   {L_Keyword2} beds, {LM_Dec_3} baths.
+   {LM_Int2_3} sq ft. Built {YearBuilt}.
+   Price: ${L_SystemPrice:,}.
+   {L_Remarks}
+   ```
+2. **Cosine Similarity**:
+   $$\text{sim}(\vec{q}, \vec{d}) = \frac{\sum_{i=1}^n q_i d_i}{\sqrt{\sum_{i=1}^n q_i^2} \sqrt{\sum_{i=1}^n d_i^2}}$$
+   - Ranges between $-1.0$ and $1.0$ (clamped).
+   - Higher values signify closer semantic alignment with the buyer's query.
+   - Formatted into an intuitive WhatsApp match score: $\text{scorePct} = \text{round}(\max(0, \text{sim}) \times 100)\%$.
+
+
 
