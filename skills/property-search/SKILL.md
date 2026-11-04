@@ -10,6 +10,7 @@ metadata:
       - clear_user_session
       - query_property_mls
       - get_market_statistics
+      - semantic_property_search
 ---
 
 
@@ -85,4 +86,7 @@ The agent progressively builds the search query through natural conversation:
 
 3. **Resetting Session**:
    - If the user says *"start over"*, *"reset"*, or *"new search"*, call `clear_user_session(userId)` and acknowledge that search preferences have been reset.
+
+4. **Semantic & Aesthetic Queries**:
+   - When a user asks for subjective, aesthetic, or architectural styles (e.g., *"charming craftsman with mountain views"*, *"mid-century modern with tons of light"*), invoke `semantic_property_search` to match against `rets_property.L_Remarks` using OpenAI vector embeddings.
 
