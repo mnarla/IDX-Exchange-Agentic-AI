@@ -6,13 +6,15 @@ export * from "./formatter.js";
 export * from "./active.js";
 export * from "./sold.js";
 export * from "./market.js";
+export * from "./vector.js";
 export declare function queryPropertyMls(args: {
-    mode?: "active" | "sold" | "both" | "stats";
+    mode?: "active" | "sold" | "both" | "stats" | "semantic";
     filters?: Partial<PropertyFilter> | null;
     city?: string | null;
+    query?: string | null;
     page?: number;
     limit?: number;
     months?: number;
-}): Promise<QueryPropertyResult | import("./types.js").MarketStatisticsResult>;
+}): Promise<QueryPropertyResult | import("./types.js").MarketStatisticsResult | import("./types.js").SemanticSearchResult>;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;

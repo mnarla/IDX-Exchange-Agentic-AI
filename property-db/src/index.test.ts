@@ -13,6 +13,13 @@ import entry, {
   calculateMarketClimate,
   setMockQuery,
   getRequiredEnv,
+  buildListingEmbeddingText,
+  cleanEmbeddingText,
+  cosineSimilarity,
+  getEmbedding,
+  setMockEmbeddingFn,
+  findSimilarListings,
+  searchSimilarProperties,
 } from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { parsePropertyQuery } from "openclaw-plugin-property-nlp";
@@ -21,22 +28,26 @@ import type { ActiveListingRow, SoldCompRow, MonthlyTrendRawRow } from "./types.
 describe("property-db plugin", () => {
   beforeEach(() => {
     setMockQuery(null);
+    setMockEmbeddingFn(null);
   });
 
   afterEach(() => {
     setMockQuery(null);
+    setMockEmbeddingFn(null);
     vi.restoreAllMocks();
   });
 
   describe("tool metadata", () => {
-    it("registers query_property_mls and get_market_statistics tools correctly", () => {
+    it("registers query_property_mls, get_market_statistics, and semantic_property_search tools correctly", () => {
       const metadata = getToolPluginMetadata(entry);
       expect(metadata?.tools.map((t) => t.name)).toEqual([
         "query_property_mls",
         "get_market_statistics",
+        "semantic_property_search",
       ]);
       expect(metadata?.tools[0]?.description).toContain("Query active MLS listings");
       expect(metadata?.tools[1]?.description).toContain("market analytics");
+      expect(metadata?.tools[2]?.description).toContain("semantic similarity");
     });
   });
 
@@ -716,6 +727,248 @@ describe("property-db plugin", () => {
           expect(res.monthsOfInventory).toBeNull();
           expect(res.text).toContain("No residential sold records found in GhostTown");
         }
+      });
+    });
+
+    describe("Week 6: Embeddings & Vector Search", () => {
+      describe("buildListingEmbeddingText & cleanEmbeddingText", () => {
+        it("builds exact handbook representation combining structured fields and L_Remarks", () => {
+          const row = {
+            L_Type_: "SingleFamilyResidence",
+            L_City: "Pasadena",
+            L_Keyword2: 4,
+            LM_Dec_3: 3,
+            LM_Int2_3: 2850,
+            YearBuilt: 1924,
+            L_SystemPrice: 1650000,
+            L_Remarks: "Charming historic craftsman bungalow with original woodwork and panoramic mountain views.",
+          };
+
+          const text = buildListingEmbeddingText(row);
+          expect(text).toBe(
+            `SingleFamilyResidence in Pasadena, CA.\n4 beds, 3 baths.\n2850 sq ft. Built 1924.\nPrice: $1,650,000.\nCharming historic craftsman bungalow with original woodwork and panoramic mountain views.`
+          );
+        });
+
+        it("handles normalized field names and fallback defaults when fields are missing", () => {
+          const text = buildListingEmbeddingText({
+            type: "Condominium",
+            city: "Irvine",
+            price: 750000,
+          });
+
+          expect(text).toContain("Condominium in Irvine, CA.");
+          expect(text).toContain("0 beds, 0 baths.");
+          expect(text).toContain("0 sq ft. Built Unknown.");
+          expect(text).toContain("Price: $750,000.");
+        });
+
+        it("cleans and clamps text for token safety", () => {
+          const multiline = "Line 1\nLine 2\r\nLine 3\n\nLine 4";
+          const cleaned = cleanEmbeddingText(multiline);
+          expect(cleaned).toBe("Line 1 Line 2 Line 3 Line 4");
+
+          const longStr = "a".repeat(10000);
+          const clamped = cleanEmbeddingText(longStr, 8000);
+          expect(clamped.length).toBe(8000);
+        });
+      });
+
+      describe("cosineSimilarity", () => {
+        it("returns 1.0 for identical vectors", () => {
+          const vec = [0.2, 0.5, 0.8, -0.1];
+          expect(cosineSimilarity(vec, vec)).toBeCloseTo(1.0, 5);
+        });
+
+        it("returns 0.0 for orthogonal vectors", () => {
+          const vecA = [1, 0, 0];
+          const vecB = [0, 1, 0];
+          expect(cosineSimilarity(vecA, vecB)).toBe(0);
+        });
+
+        it("returns -1.0 for diametrically opposite vectors", () => {
+          const vecA = [1, 2, 3];
+          const vecB = [-1, -2, -3];
+          expect(cosineSimilarity(vecA, vecB)).toBeCloseTo(-1.0, 5);
+        });
+
+        it("is scale invariant", () => {
+          const vecA = [1, 2, 3];
+          const vecB = [2, 4, 6];
+          expect(cosineSimilarity(vecA, vecB)).toBeCloseTo(1.0, 5);
+        });
+
+        it("returns 0 for empty or zero vectors without dividing by zero", () => {
+          expect(cosineSimilarity([], [])).toBe(0);
+          expect(cosineSimilarity([0, 0, 0], [1, 2, 3])).toBe(0);
+        });
+      });
+
+      describe("getEmbedding", () => {
+        it("throws clear error when neither OPENAI_API_KEY nor GEMINI_API_KEY is configured and no mock is set", async () => {
+          const originalOpenAI = process.env.OPENAI_API_KEY;
+          const originalGemini = process.env.GEMINI_API_KEY;
+          delete process.env.OPENAI_API_KEY;
+          delete process.env.GEMINI_API_KEY;
+
+          await expect(getEmbedding("Test property description")).rejects.toThrow(
+            /Missing.*API_KEY/
+          );
+
+          if (originalOpenAI) process.env.OPENAI_API_KEY = originalOpenAI;
+          if (originalGemini) process.env.GEMINI_API_KEY = originalGemini;
+        });
+
+        it("uses mockEmbeddingFn when provided", async () => {
+          setMockEmbeddingFn(async (text, model) => {
+            expect(model).toBe("text-embedding-3-small");
+            expect(text).toBe("Cozy studio");
+            return [0.1, 0.2, 0.3];
+          });
+
+          const emb = await getEmbedding("Cozy studio", { provider: "openai" });
+          expect(emb).toEqual([0.1, 0.2, 0.3]);
+        });
+
+        it("selects Gemini provider and passes gemini-embedding-001 by default", async () => {
+          setMockEmbeddingFn(async (text, model) => {
+            expect(model).toBe("gemini-embedding-001");
+            return [0.4, 0.5, 0.6];
+          });
+
+          const emb = await getEmbedding("Cozy studio", { provider: "gemini" });
+          expect(emb).toEqual([0.4, 0.5, 0.6]);
+        });
+      });
+
+      describe("findSimilarListings", () => {
+        it("ranks listings by descending cosine similarity and respects top_k", async () => {
+          const queryVec = [1, 0, 0];
+          const listingPool = [
+            { id: "LISTING-LOW", embedding: [0.1, 0.9, 0] },
+            { id: "LISTING-HIGH", embedding: [0.95, 0.1, 0] },
+            { id: "LISTING-MID", embedding: [0.6, 0.4, 0] },
+            { id: "LISTING-ZERO", embedding: [0, 1, 0] },
+          ];
+
+          const topResults = await findSimilarListings(queryVec, listingPool, 2);
+
+          expect(topResults.length).toBe(2);
+          expect(topResults[0]?.listingId).toBe("LISTING-HIGH");
+          expect(topResults[1]?.listingId).toBe("LISTING-MID");
+          expect(topResults[0]?.score).toBeGreaterThan(topResults[1]!.score);
+        });
+      });
+
+      describe("searchSimilarProperties & queryPropertyMls integration", () => {
+        const mockRows: ActiveListingRow[] = [
+          {
+            L_ListingID: "MLS-CRAFTSMAN-01",
+            L_DisplayId: "CR01",
+            L_Address: "450 Orange Grove Blvd",
+            L_City: "Pasadena",
+            L_Zip: "91105",
+            price: 1450000,
+            beds: 3,
+            baths: 2,
+            sqft: 2100,
+            type: "SingleFamilyResidence",
+            status: "Active",
+            lat: 34.14,
+            lng: -118.15,
+            YearBuilt: 1918,
+            AssociationFee: null,
+            DaysOnMarket: 14,
+            PoolPrivateYN: "0",
+            ViewYN: "1",
+            FireplaceYN: "1",
+            PhotoCount: 28,
+            LA1_UserFirstName: "Sarah",
+            LA1_UserLastName: "Miller",
+            LO1_OrganizationName: "Heritage Realty",
+            L_Remarks: "Charming craftsman bungalow with majestic mountain views, exposed wood beams, and timeless character.",
+          },
+          {
+            L_ListingID: "MLS-MODERN-02",
+            L_DisplayId: "MO02",
+            L_Address: "100 Grand Ave #402",
+            L_City: "Los Angeles",
+            L_Zip: "90012",
+            price: 920000,
+            beds: 2,
+            baths: 2,
+            sqft: 1350,
+            type: "Condominium",
+            status: "Active",
+            lat: 34.05,
+            lng: -118.25,
+            YearBuilt: 2022,
+            AssociationFee: 550,
+            DaysOnMarket: 5,
+            PoolPrivateYN: "1",
+            ViewYN: "0",
+            FireplaceYN: "0",
+            PhotoCount: 15,
+            LA1_UserFirstName: "Alex",
+            LA1_UserLastName: "Chen",
+            LO1_OrganizationName: "Downtown Living",
+            L_Remarks: "Sleek modern high-rise condo with minimalist stainless steel kitchen and rooftop pool.",
+          },
+        ];
+
+        beforeEach(() => {
+          setMockQuery(async () => mockRows);
+          setMockEmbeddingFn(async (text) => {
+            // Simulate semantic vectors based on semantic content
+            if (text.toLowerCase().includes("craftsman") || text.toLowerCase().includes("mountain")) {
+              return [0.9, 0.1, 0.05];
+            }
+            if (text.toLowerCase().includes("modern") || text.toLowerCase().includes("condo")) {
+              return [0.05, 0.9, 0.1];
+            }
+            return [0.3, 0.3, 0.3];
+          });
+        });
+
+        it("returns validation error for empty or whitespace query", async () => {
+          const res = await searchSimilarProperties({ query: "   " });
+          expect("error" in res).toBe(true);
+          if ("error" in res) {
+            expect(res.error).toContain("Please provide a search description");
+          }
+        });
+
+        it("searches and ranks listings semantically matching 'charming craftsman with mountain views'", async () => {
+          const res = await searchSimilarProperties({
+            query: "charming craftsman with mountain views and character",
+            topK: 5,
+          });
+
+          expect("mode" in res && res.mode === "semantic").toBe(true);
+          if ("mode" in res && res.mode === "semantic") {
+            expect(res.resultsCount).toBe(2);
+            expect(res.matches[0]?.listingId).toBe("MLS-CRAFTSMAN-01");
+            expect(res.matches[0]?.scorePct).toBeGreaterThanOrEqual(95);
+            expect(res.text).toContain("Top 2 Semantic Matches");
+            expect(res.text).toContain("450 Orange Grove Blvd");
+            expect(res.text).toContain("Charming craftsman bungalow with majestic mountain views");
+            expect(res.matches[0]?.card.photoCount).toBe(28);
+          }
+        });
+
+        it("executes semantic search via queryPropertyMls with mode: 'semantic'", async () => {
+          const res = await queryPropertyMls({
+            mode: "semantic",
+            query: "modern high-rise condo",
+            limit: 5,
+          });
+
+          expect("mode" in res && res.mode === "semantic").toBe(true);
+          if ("mode" in res && res.mode === "semantic") {
+            expect(res.matches[0]?.listingId).toBe("MLS-MODERN-02");
+            expect(res.matches[0]?.card.price).toBe(920000);
+          }
+        });
       });
     });
   });

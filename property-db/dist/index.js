@@ -9,7 +9,9 @@ export * from "./formatter.js";
 export * from "./active.js";
 export * from "./sold.js";
 export * from "./market.js";
+export * from "./vector.js";
 import { getMarketStatistics } from "./market.js";
+import { searchSimilarProperties } from "./vector.js";
 const PropertyFilterSchema = Type.Object({
     city: Type.Union([Type.String(), Type.Null()]),
     maxPrice: Type.Union([Type.Number(), Type.Null()]),
@@ -24,6 +26,17 @@ const PropertyFilterSchema = Type.Object({
 export async function queryPropertyMls(args) {
     const mode = args.mode || "active";
     const targetCity = args.city?.trim() || args.filters?.city?.trim() || null;
+    if (mode === "semantic") {
+        const semanticQuery = args.query?.trim() || targetCity || "";
+        return await searchSimilarProperties({
+            query: semanticQuery,
+            topK: args.limit ?? 5,
+            city: targetCity,
+            maxPrice: args.filters?.maxPrice ?? null,
+            minBeds: args.filters?.minBeds ?? null,
+            type: args.filters?.type ?? null,
+        });
+    }
     if (mode === "sold" || mode === "both" || mode === "stats") {
         if (!targetCity) {
             return {
@@ -83,12 +96,15 @@ export default defineToolPlugin({
             name: "query_property_mls",
             description: "Query active MLS listings (rets_property) and/or recent sold comps (california_sold). Returns structured data and formatted property cards.",
             parameters: Type.Object({
-                mode: Type.Optional(Type.Union([Type.Literal("active"), Type.Literal("sold"), Type.Literal("both"), Type.Literal("stats")], {
-                    description: "Query mode: 'active' for current listings, 'sold' for comps, 'both', or 'stats' for market statistics. Defaults to 'active'.",
+                mode: Type.Optional(Type.Union([Type.Literal("active"), Type.Literal("sold"), Type.Literal("both"), Type.Literal("stats"), Type.Literal("semantic")], {
+                    description: "Query mode: 'active' for current listings, 'sold' for comps, 'both', 'stats' for market statistics, or 'semantic' for vector similarity. Defaults to 'active'.",
                 })),
                 filters: Type.Optional(PropertyFilterSchema),
                 city: Type.Optional(Type.String({
                     description: "City name. Required for 'sold', 'both', and 'stats' modes if not provided in filters.",
+                })),
+                query: Type.Optional(Type.String({
+                    description: "Free-text description used when mode is 'semantic'.",
                 })),
                 page: Type.Optional(Type.Number({
                     description: "Page number for active listings (1-indexed). Defaults to 1.",
@@ -126,6 +142,33 @@ export default defineToolPlugin({
             }),
             execute: async (params) => {
                 return await getMarketStatistics(params);
+            },
+        }),
+        tool({
+            name: "semantic_property_search",
+            description: "Search active MLS listings (rets_property) by semantic similarity using OpenAI embeddings. Matches listing remarks with qualitative, aesthetic, and architectural preferences (e.g. 'charming craftsman with mountain views and character'). Returns top 5 most similar listings.",
+            parameters: Type.Object({
+                query: Type.String({
+                    description: "Free-text description of desired property features, architectural style, or vibe.",
+                }),
+                topK: Type.Optional(Type.Number({
+                    description: "Number of top similar listings to return (defaults to 5).",
+                })),
+                city: Type.Optional(Type.String({
+                    description: "Optional city to restrict semantic search (e.g. 'Pasadena', 'Irvine').",
+                })),
+                maxPrice: Type.Optional(Type.Number({
+                    description: "Optional maximum price filter.",
+                })),
+                minBeds: Type.Optional(Type.Number({
+                    description: "Optional minimum bedrooms filter.",
+                })),
+                type: Type.Optional(Type.String({
+                    description: "Optional property type (e.g. 'SingleFamilyResidence', 'Condominium').",
+                })),
+            }),
+            execute: async (params) => {
+                return await searchSimilarProperties(params);
             },
         }),
     ],

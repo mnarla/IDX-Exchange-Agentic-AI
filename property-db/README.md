@@ -3,7 +3,7 @@
 OpenClaw database query plugin for real estate active listings (`rets_property`), historical sold comps (`california_sold`), and market statistics / trend analysis.
 
 ## Tools
-- `query_property_mls`: Query active listings and/or sold comps with pagination and formatted cards. Also supports `mode: "stats"`.
+- `query_property_mls`: Query active listings and/or sold comps with pagination and formatted cards. Also supports `mode: "stats"` and `mode: "semantic"`.
 - `get_market_statistics`: Calculate real estate market statistics for any California city/zip:
   - Median and average close price
   - Average price per square foot
@@ -12,6 +12,11 @@ OpenClaw database query plugin for real estate active listings (`rets_property`)
   - Inventory comparison (`rets_property` active listings vs. `california_sold` volume & months of inventory)
   - Month-over-Month (MoM) and Year-over-Year (YoY) price trends
   - Mobile-friendly WhatsApp markdown summaries with actionable market climate verdicts
+- `semantic_property_search`: Semantic similarity search using vector embeddings and cosine similarity:
+  - Generates embeddings using **Google Gemini** (free via `GEMINI_API_KEY`) or **OpenAI** (`OPENAI_API_KEY`)
+  - Embeds listing descriptions (`rets_property.L_Remarks`) combined with structured specs (type, city, beds, baths, sq ft, year built, price)
+  - Finds the top 5 semantically similar active listings matching free-text lifestyle/aesthetic queries
+  - WhatsApp cards with match score percentages and highlighted remarks snippets
 
 ## Requirements
 - Node.js 20+
@@ -21,6 +26,7 @@ OpenClaw database query plugin for real estate active listings (`rets_property`)
   - `MYSQL_USER`
   - `MYSQL_PASSWORD`
   - `MYSQL_DATABASE`
+  - `GEMINI_API_KEY` (free tier via Google AI Studio) or `OPENAI_API_KEY`
 
 ## Scripts
 - `npm run build`: Compile TypeScript.

@@ -102,6 +102,7 @@ export function formatActiveCard(row: ActiveListingRow): FormattedActiveCard {
     agentName,
     officeName,
     photoCount: row.PhotoCount ?? null,
+    remarks: row.L_Remarks?.trim() || row.remarks?.trim() || null,
     text: cardText,
   };
 }

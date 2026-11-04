@@ -26,6 +26,8 @@ export interface ActiveListingRow {
   LA1_UserFirstName: string | null;
   LA1_UserLastName: string | null;
   LO1_OrganizationName: string | null;
+  L_Remarks?: string | null;
+  remarks?: string | null;
 }
 
 export interface SoldCompRow {
@@ -68,6 +70,8 @@ export interface FormattedActiveCard {
   officeName: string | null;
   photoCount: number | null;
   text: string;
+  remarks?: string | null;
+  similarityScore?: number | null;
 }
 
 export interface FormattedSoldCard {
@@ -180,4 +184,51 @@ export interface MarketStatistics {
 }
 
 export type MarketStatisticsResult = MarketStatistics | QueryErrorResult;
+
+export interface ListingEmbeddingRow {
+  L_ListingID?: string;
+  L_Type_?: string | null;
+  type?: string | null;
+  L_City?: string | null;
+  city?: string | null;
+  L_Keyword2?: number | string | null;
+  beds?: number | string | null;
+  LM_Dec_3?: number | string | null;
+  baths?: number | string | null;
+  LM_Int2_3?: number | string | null;
+  sqft?: number | string | null;
+  YearBuilt?: number | string | null;
+  yearBuilt?: number | string | null;
+  L_SystemPrice?: number | string | null;
+  price?: number | string | null;
+  L_Remarks?: string | null;
+  remarks?: string | null;
+}
+
+export interface ScoredListingMatch {
+  listingId: string;
+  similarity: number;
+  scorePct: number;
+  card: FormattedActiveCard;
+  remarksSnippet?: string | null;
+}
+
+export interface SemanticSearchResult {
+  mode: "semantic";
+  query: string;
+  topK: number;
+  resultsCount: number;
+  matches: ScoredListingMatch[];
+  text: string;
+}
+
+export interface SemanticSearchOptions {
+  query: string;
+  topK?: number;
+  city?: string | null;
+  maxPrice?: number | null;
+  minBeds?: number | null;
+  type?: string | null;
+}
+
 
