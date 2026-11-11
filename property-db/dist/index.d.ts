@@ -1,3 +1,4 @@
+export * from "./knowledge.js";
 import type { PropertyFilter, QueryPropertyResult } from "./types.js";
 export * from "./types.js";
 export * from "./db.js";

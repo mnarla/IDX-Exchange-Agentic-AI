@@ -1,3 +1,5 @@
+import { searchRealEstateKnowledge } from "./knowledge.js";
+export * from "./knowledge.js";
 import { Type } from "typebox";
 import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 import { searchActiveListings } from "./active.js";
@@ -124,6 +126,12 @@ export default defineToolPlugin({
   name: "Property DB",
   description: "MLS database query layer for active listings, sold comps, and market analytics.",
   tools: (tool) => [
+    tool({
+      name: "search_real_estate_knowledge",
+      description: "Retrieve source passages for real estate definitions, MLS table columns, and documented market reports. Answer with source citations; do not invent unsupported facts.",
+      parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 4000 }), topK: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })) }),
+      execute: async (params) => await searchRealEstateKnowledge(params),
+    }),
     tool({
       name: "query_property_mls",
       description: "Query active MLS listings (rets_property) and/or recent sold comps (california_sold). Returns structured data and formatted property cards.",

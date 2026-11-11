@@ -13,6 +13,7 @@
   },
   "contracts": {
     "tools": [
+      "search_real_estate_knowledge",
       "query_property_mls",
       "get_market_statistics",
       "semantic_property_search",

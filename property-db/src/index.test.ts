@@ -41,14 +41,15 @@ describe("property-db plugin", () => {
     it("registers query_property_mls, get_market_statistics, and semantic_property_search tools correctly", () => {
       const metadata = getToolPluginMetadata(entry);
       expect(metadata?.tools.map((t) => t.name)).toEqual([
+        "search_real_estate_knowledge",
         "query_property_mls",
         "get_market_statistics",
         "semantic_property_search",
         "recommend_properties",
       ]);
-      expect(metadata?.tools[0]?.description).toContain("Query active MLS listings");
-      expect(metadata?.tools[1]?.description).toContain("market analytics");
-      expect(metadata?.tools[2]?.description).toContain("semantic similarity");
+      expect(metadata?.tools[1]?.description).toContain("Query active MLS listings");
+      expect(metadata?.tools[2]?.description).toContain("market analytics");
+      expect(metadata?.tools[3]?.description).toContain("semantic similarity");
     });
   });
 
