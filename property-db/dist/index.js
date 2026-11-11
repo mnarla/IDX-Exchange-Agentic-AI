@@ -175,7 +175,7 @@ export default defineToolPlugin({
         }),
         tool({
             name: "recommend_properties",
-            description: "Recommend up to five similar active listings from a liked listing ID using structured and embedding similarity, with recent sold-comp price comparisons.",
+            description: "Recommend up to five similar active listings from a liked listing ID using structured and embedding similarity, with recent sold-comp price comparisons. If the user requests homes in a city, ALWAYS pass filters.city; the liked listing ID alone does not restrict location. Preserve returned ranks and do not invent inventory counts or nearby locations.",
             parameters: Type.Object({
                 listingId: Type.String({ minLength: 1, description: "L_ListingID of the listing the user likes." }),
                 topK: Type.Optional(Type.Integer({ minimum: 1, maximum: 5, default: 5 })),
