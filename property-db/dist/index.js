@@ -10,6 +10,8 @@ export * from "./active.js";
 export * from "./sold.js";
 export * from "./market.js";
 export * from "./vector.js";
+export * from "./recommendation.js";
+import { recommendProperties } from "./recommendation.js";
 import { getMarketStatistics } from "./market.js";
 import { searchSimilarProperties } from "./vector.js";
 const PropertyFilterSchema = Type.Object({
@@ -170,6 +172,16 @@ export default defineToolPlugin({
             execute: async (params) => {
                 return await searchSimilarProperties(params);
             },
+        }),
+        tool({
+            name: "recommend_properties",
+            description: "Recommend up to five similar active listings from a liked listing ID using structured and embedding similarity, with recent sold-comp price comparisons.",
+            parameters: Type.Object({
+                listingId: Type.String({ minLength: 1, description: "L_ListingID of the listing the user likes." }),
+                topK: Type.Optional(Type.Integer({ minimum: 1, maximum: 5, default: 5 })),
+                filters: Type.Optional(Type.Partial(PropertyFilterSchema)),
+            }),
+            execute: async (params) => await recommendProperties(params),
         }),
     ],
 });

@@ -15,7 +15,8 @@
     "tools": [
       "query_property_mls",
       "get_market_statistics",
-      "semantic_property_search"
+      "semantic_property_search",
+      "recommend_properties"
     ]
   }
 }

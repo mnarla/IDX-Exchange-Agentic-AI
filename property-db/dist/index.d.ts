@@ -7,6 +7,7 @@ export * from "./active.js";
 export * from "./sold.js";
 export * from "./market.js";
 export * from "./vector.js";
+export * from "./recommendation.js";
 export declare function queryPropertyMls(args: {
     mode?: "active" | "sold" | "both" | "stats" | "semantic";
     filters?: Partial<PropertyFilter> | null;

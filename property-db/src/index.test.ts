@@ -44,6 +44,7 @@ describe("property-db plugin", () => {
         "query_property_mls",
         "get_market_statistics",
         "semantic_property_search",
+        "recommend_properties",
       ]);
       expect(metadata?.tools[0]?.description).toContain("Query active MLS listings");
       expect(metadata?.tools[1]?.description).toContain("market analytics");
