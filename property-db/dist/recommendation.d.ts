@@ -32,6 +32,7 @@ export declare function recommendProperties(options: {
 }): Promise<{
     error: string;
     mode?: undefined;
+    appliedFilters?: undefined;
     listingId?: undefined;
     resultsCount?: undefined;
     matches?: undefined;
@@ -40,6 +41,7 @@ export declare function recommendProperties(options: {
     candidateLimit?: undefined;
 } | {
     mode: string;
+    appliedFilters: Partial<PropertyFilter>;
     listingId: string;
     resultsCount: number;
     matches: never[];
@@ -49,11 +51,13 @@ export declare function recommendProperties(options: {
     candidateLimit?: undefined;
 } | {
     mode: string;
+    appliedFilters: Partial<PropertyFilter>;
     listingId: string;
     resultsCount: number;
     candidateCount: number;
     candidateLimit: number;
     matches: {
+        rank: number;
         listingId: string;
         score: {
             price: number;

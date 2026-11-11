@@ -68,7 +68,7 @@ ORDER BY (
 LIMIT 100`, [...params, target.L_ListingID, target.price, target.price, target.price, target.beds, target.L_City, target.sqft, target.sqft]);
         const eligible = candidates.filter(r => r.L_ListingID !== target.L_ListingID && r.status === "Active");
         if (!eligible.length)
-            return { mode: "recommendation", listingId: target.L_ListingID, resultsCount: 0, matches: [], text: "No other active listings match your constraints." };
+            return { mode: "recommendation", appliedFilters: options.filters ?? {}, listingId: target.L_ListingID, resultsCount: 0, matches: [], text: "No other active listings match your constraints." };
         const targetEmb = await getEmbedding(buildListingEmbeddingText(target));
         if (!targetEmb.length || !targetEmb.some(n => n !== 0))
             throw new Error("Target embedding is empty or zero.");
@@ -84,10 +84,10 @@ LIMIT 100`, [...params, target.L_ListingID, target.price, target.price, target.p
         for (const { row, score } of ranked.slice(0, topK)) {
             const comps = await validateWithComps(row.L_City, row.sqft, row.price);
             const reasons = [score.price ? "Similar price" : "", score.beds ? "Same bedroom count" : "", score.city ? "Same city" : "", score.sqft ? "Similar living area" : ""].filter(Boolean);
-            matches.push({ listingId: row.L_ListingID, score, reasons, card: formatActiveCard(row), comps });
+            matches.push({ rank: matches.length + 1, listingId: row.L_ListingID, score, reasons, card: formatActiveCard(row), comps });
         }
         const text = matches.map((m, i) => `[Recommendation ${i + 1}] — Similarity score: ${m.score.total.toFixed(2)}\n${m.card.text}\n${m.reasons.join(" • ")}\n${m.comps.status === "available" ? `Recent-sales estimate: $${m.comps.compPrice.toLocaleString("en-US")}; asking price ${m.comps.deltaPct}% relative to estimate (${m.comps.compCount} comps).` : "Insufficient recent sold data for a price estimate."}`).join("\n\n---\n\n");
-        return { mode: "recommendation", listingId: target.L_ListingID, resultsCount: matches.length, candidateCount: eligible.length, candidateLimit: 100, matches, text: `${text}\n\nComps: same city, residential sales in the last 6 months, living area ±20%. Price estimates are comparisons with recent sales, not appraisals.` };
+        return { mode: "recommendation", appliedFilters: options.filters ?? {}, listingId: target.L_ListingID, resultsCount: matches.length, candidateCount: eligible.length, candidateLimit: 100, matches, text: `City restriction: ${options.filters?.city || "None (cross-city results allowed)"}\n\n${text}\n\nComps: same city, residential sales in the last 6 months, living area ±20%. Price estimates are comparisons with recent sales, not appraisals.` };
     }
     catch (error) {
         return { error: `Recommendation failed: ${error instanceof Error ? error.message : String(error)}` };

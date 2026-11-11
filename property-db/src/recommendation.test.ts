@@ -68,3 +68,15 @@ it("returns five ranked recommendations by default", async () => {
   const result = await recommendProperties({listingId:"target",filters:{maxPrice:1000000}});
   expect(result).toMatchObject({resultsCount:5}); expect(compQueries).toBe(5);
 });
+it("returns applied constraints and explicit ranks for presentation", async () => {
+  setMockEmbeddingFn(async () => [1,0]);
+  setMockQuery(async <T>(sql: string, params?: unknown[]) => {
+    if(sql.includes("avg_ppsf"))return [{avg_ppsf:null,comp_count:0}] as T[];
+    if(sql.endsWith("LIMIT 1"))return [row("target")] as T[];
+    expect(params?.slice(0,2)).toEqual(["Active","Irvine"]);
+    return [row("best"),row("worse",{price:1300000})] as T[];
+  });
+  const r = await recommendProperties({listingId:"target",filters:{city:"Irvine"}});
+  expect(r).toMatchObject({appliedFilters:{city:"Irvine"},matches:[{rank:1,listingId:"best"},{rank:2,listingId:"worse"}]});
+  expect(r.text).toContain("City restriction: Irvine");
+});
