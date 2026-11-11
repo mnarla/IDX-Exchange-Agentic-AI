@@ -1,0 +1,7 @@
+[
+  {
+    "title": "Week 5 Market Analytics Architecture",
+    "location": "docs/architecture.md, Core Market Analytics Metrics",
+    "content": "| **List-to-Close Ratio** | `(AVG(ClosePrice / NULLIF(ListPrice, 0))) * 100` | Negotiating leverage indicator (> 100% = seller leverage, < 98% = buyer leverage) |"
+  }
+]
