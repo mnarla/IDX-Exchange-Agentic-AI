@@ -37,3 +37,5 @@ npm run plugin:build
 npm run plugin:validate
 npm test
 ```
+
+- `knowledge/`: Week 8 document RAG sources, index instructions, and end-to-end verification; see [knowledge/README.md](knowledge/README.md).
