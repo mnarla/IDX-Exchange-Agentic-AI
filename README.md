@@ -9,6 +9,7 @@ An OpenClaw-based multi-agent real estate assistant for an IDX Exchange internsh
   - `property-search`: Conversational multi-turn property search with session memory.
   - `market-stats`: Market analytics agent responding to market queries with data-backed summaries, trends, and market climate assessment.
   - `semantic-search`: Semantic property search agent utilizing OpenAI vector embeddings (`text-embedding-3-small`) and cosine similarity over `rets_property.L_Remarks` to match qualitative, aesthetic, and architectural styles.
+- `skills/recommendation/`: Week 7 hybrid listing recommendations with recent sold-comp price comparisons.
 - `property-nlp/`: OpenClaw tool plugin providing natural language parsing and multi-turn session memory (`parse_property_query`, `get_user_session`, `update_user_session`, `clear_user_session`).
 - `property-db/`: OpenClaw tool plugin providing MLS database integration (`query_property_mls`), market analytics (`get_market_statistics`), and vector similarity search (`semantic_property_search`).
 - `time-tools/`: OpenClaw tool plugin providing the `get_current_time` tool.

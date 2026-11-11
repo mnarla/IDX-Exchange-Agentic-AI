@@ -33,3 +33,17 @@ OpenClaw database query plugin for real estate active listings (`rets_property`)
 - `npm run plugin:validate`: Validate OpenClaw plugin contract.
 - `npm test`: Run Vitest unit tests (using mocked pool).
 
+
+## Week 7 recommendations
+
+`recommend_properties({ listingId: "ABC123", topK: 5, filters: { maxPrice: 1000000 } })`
+returns up to five other active listings. Ranking combines handbook structured points
+(price 20, bedrooms 15, city 15, living area 10) with cosine similarity × 40.
+Each match includes the score breakdown, match reasons, existing property card,
+and a `california_sold` price comparison (same city, residential, six months,
+±20% living area). Missing comps return `insufficient_data` and null estimates.
+
+The engine embeds at most 100 candidates shortlisted by structured score, so results
+are best within that shortlist. It reuses the configured embedding provider without
+persistent caching. Errors are returned explicitly rather than as successful empty matches.
+The agent workflow is in `skills/recommendation/SKILL.md`.
