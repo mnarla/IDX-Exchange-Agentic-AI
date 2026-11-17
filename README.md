@@ -12,6 +12,7 @@ An OpenClaw-based multi-agent real estate assistant for an IDX Exchange internsh
 - `skills/recommendation/`: Week 7 hybrid listing recommendations with recent sold-comp price comparisons.
 - `skills/real-estate-knowledge/`: Week 8 grounded document RAG retrieval for definitions and MLS schema.
 - `skills/orchestrator/`: Week 9 multi-agent coordinator that classifies queries, routes across 5 specialized agents, and executes mixed-intent queries concurrently.
+- `skills/whatsapp/`: Week 10 WhatsApp communication layer with typing indicator presence and card formatting.
 - `property-nlp/`: OpenClaw tool plugin providing natural language parsing and multi-turn session memory (`parse_property_query`, `get_user_session`, `update_user_session`, `clear_user_session`).
 - `property-db/`: OpenClaw tool plugin providing MLS database integration (`query_property_mls`), market analytics (`get_market_statistics`), and vector similarity search (`semantic_property_search`).
 - `time-tools/`: OpenClaw tool plugin providing the `get_current_time` tool.

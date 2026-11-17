@@ -47,6 +47,7 @@ describe("property-db plugin", () => {
         "semantic_property_search",
         "recommend_properties",
         "orchestrate",
+        "on_whatsapp_message",
       ]);
       expect(metadata?.tools[1]?.description).toContain("Query active MLS listings");
       expect(metadata?.tools[2]?.description).toContain("market analytics");
