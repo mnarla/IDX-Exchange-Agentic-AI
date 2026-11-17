@@ -17,7 +17,8 @@
       "query_property_mls",
       "get_market_statistics",
       "semantic_property_search",
-      "recommend_properties"
+      "recommend_properties",
+      "orchestrate"
     ]
   }
 }

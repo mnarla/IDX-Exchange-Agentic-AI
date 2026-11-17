@@ -99,7 +99,7 @@ export async function parsePropertyQuery(query) {
         const pool = /\bpool\b/i.test(query) ? "True" : null;
         const hasView = /\bview\b/i.test(query) ? "True" : null;
         // 8. Parse City
-        const cityMatch = query.match(/(?:in|around)\s+([A-Za-z\s]+?)(?:\s+(?:under|with|at|for|having|\$)|[.,?!]|$)/i)
+        const cityMatch = query.match(/(?:in|around)\s+([A-Za-z\s]+?)(?:\s+(?:and\s+(?:tell|how|what|is|are|whether|show|give|can|also)|and|under|with|at|for|having|\$)|[.,?!]|$)/i)
             || query.match(/in\s+([A-Za-z\s]+?)(?:\s+under|\s+with|\s+at|[.,?!]|$)/i);
         let city = null;
         if (cityMatch) {

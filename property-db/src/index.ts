@@ -19,9 +19,11 @@ export * from "./sold.js";
 export * from "./market.js";
 export * from "./vector.js";
 export * from "./recommendation.js";
+export * from "./orchestrator.js";
 import { recommendProperties } from "./recommendation.js";
 import { getMarketStatistics } from "./market.js";
 import { searchSimilarProperties } from "./vector.js";
+import { orchestrate } from "./orchestrator.js";
 
 const PropertyFilterSchema = Type.Object(
   {
@@ -252,6 +254,23 @@ export default defineToolPlugin({
         filters: Type.Optional(Type.Partial(PropertyFilterSchema)),
       }),
       execute: async (params) => await recommendProperties(params),
+    }),
+    tool({
+      name: "orchestrate",
+      description: "Central coordinator that analyzes real estate queries, routes them across specialized agents (propertySearchAgent, marketStatsAgent, recommendationAgent, ragAgent, emailDraftAgent), or executes them concurrently for mixed intents.",
+      parameters: Type.Object({
+        query: Type.String({
+          description: "Natural language real estate query or request.",
+        }),
+        userId: Type.Optional(
+          Type.String({
+            description: "Unique user identifier or session ID (defaults to 'default_user').",
+          })
+        ),
+      }),
+      execute: async ({ query, userId }) => {
+        return await orchestrate(query, userId ?? "default_user");
+      },
     }),
   ],
 });

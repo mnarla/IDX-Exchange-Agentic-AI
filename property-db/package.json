@@ -2,6 +2,8 @@
   "name": "openclaw-plugin-property-db",
   "version": "0.1.0",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
