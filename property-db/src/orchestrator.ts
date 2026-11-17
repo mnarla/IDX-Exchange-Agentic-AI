@@ -145,6 +145,7 @@ export async function propertySearchAgent(query: string, userId: string): Promis
     filters,
     results,
     cards: results.cards,
+    listings: results.cards,
   };
 }
 

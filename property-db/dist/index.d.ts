@@ -10,6 +10,7 @@ export * from "./market.js";
 export * from "./vector.js";
 export * from "./recommendation.js";
 export * from "./orchestrator.js";
+export * from "./whatsapp.js";
 export declare function queryPropertyMls(args: {
     mode?: "active" | "sold" | "both" | "stats" | "semantic";
     filters?: Partial<PropertyFilter> | null;

@@ -18,7 +18,8 @@
       "get_market_statistics",
       "semantic_property_search",
       "recommend_properties",
-      "orchestrate"
+      "orchestrate",
+      "on_whatsapp_message"
     ]
   }
 }

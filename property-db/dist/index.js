@@ -14,10 +14,12 @@ export * from "./market.js";
 export * from "./vector.js";
 export * from "./recommendation.js";
 export * from "./orchestrator.js";
+export * from "./whatsapp.js";
 import { recommendProperties } from "./recommendation.js";
 import { getMarketStatistics } from "./market.js";
 import { searchSimilarProperties } from "./vector.js";
 import { orchestrate } from "./orchestrator.js";
+import { onWhatsAppMessage } from "./whatsapp.js";
 const PropertyFilterSchema = Type.Object({
     city: Type.Union([Type.String(), Type.Null()]),
     maxPrice: Type.Union([Type.Number(), Type.Null()]),
@@ -206,6 +208,21 @@ export default defineToolPlugin({
             }),
             execute: async ({ query, userId }) => {
                 return await orchestrate(query, userId ?? "default_user");
+            },
+        }),
+        tool({
+            name: "on_whatsapp_message",
+            description: "Week 10 WhatsApp communication layer: handles incoming WhatsApp messages with typing indicator presence, invokes orchestrator, and returns handbook-formatted WhatsApp property summaries.",
+            parameters: Type.Object({
+                message: Type.String({
+                    description: "Incoming WhatsApp message text from user.",
+                }),
+                userId: Type.String({
+                    description: "WhatsApp user phone number or sender ID.",
+                }),
+            }),
+            execute: async ({ message, userId }) => {
+                return await onWhatsAppMessage(message, userId);
             },
         }),
     ],

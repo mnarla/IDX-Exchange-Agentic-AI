@@ -105,6 +105,7 @@ export async function propertySearchAgent(query, userId) {
         filters,
         results,
         cards: results.cards,
+        listings: results.cards,
     };
 }
 /**
